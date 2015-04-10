@@ -17,7 +17,7 @@ How to compile the image?
 git clone https://github.com/dragino/openwrt-bb-1407.git dragino2-BB-IoT
 cd dragino2-BB-IoT
 ./set_up_build_enviroment.sh
-#build default IoT App on MS14 directory
+#build default IoT App on barrier_breaker directory
 ./build_image.sh   
 ```
 
