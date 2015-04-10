@@ -1,0 +1,8 @@
+#!/bin/sh
+# Get 16 Byte ASCII data from a binary file
+
+SN_BIN='/dev/mtd5'
+
+DATA=`xxd -ps -l 12 $SN_BIN | xxd -r -p`
+
+echo $DATA

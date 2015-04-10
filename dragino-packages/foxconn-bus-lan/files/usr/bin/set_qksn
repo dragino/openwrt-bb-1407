@@ -1,0 +1,29 @@
+#!/bin/sh
+# Write Input to a binary file
+
+SN=$1
+SN_FILE='/tmp/QK_SN'
+SN_BIN='/dev/mtd5'
+
+echo $1 > $SN_FILE
+
+echo ""
+echo "Erase Original SN number ..."
+echo ""
+mtd erase /dev/mtd5
+
+echo ""
+echo "Writing to file ..."
+echo ""
+dd if=$SN_FILE of=$SN_BIN
+
+echo ""
+echo "Verifying 12 bytes ..."
+SN_VERIFY=`xxd -ps -l 12 $SN_BIN | xxd -r -p`
+if [ "$SN_VERIFY" = "$SN" ]; then
+  echo "Writing Successfully: SN = $SN"
+else
+  echo "Verify Error: Result $SN_VERIFY != $SN !!! "
+fi
+
+echo ""

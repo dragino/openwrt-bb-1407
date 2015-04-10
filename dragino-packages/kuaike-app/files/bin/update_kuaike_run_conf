@@ -1,0 +1,16 @@
+#!/bin/sh
+#After KuaiKe update the run.conf, need to run this script to take affect
+
+#check if there is update for ac address
+ac_address_new=`cat /kuaike/run.conf | grep "ac address" | awk -F = '{print $2}'`
+ac_address_store=`uci get foxconn.general.server`
+if [ "$ac_address_new" != "$ac_address_store" ]; then
+	logger "find different ac address, change to $ac_address_new"
+	uci set foxconn.general.server="$ac_address_new"
+	uci commit foxconn
+fi 
+
+local_domain=`cat /kuaike/run.conf | grep "domain address" | awk -F = '{print $2}'`
+logger "setting new local domain"
+sed "s/address=\/[^#]*\//address=\/${local_domain}\//" /etc/dnsmasq.conf -i
+/etc/init.d/dnsmasq restart

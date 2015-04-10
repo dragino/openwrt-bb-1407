@@ -1,0 +1,19 @@
+#!/bin/sh
+
+board=`uci get arduino.mcu.board`
+
+echo 1 > /sys/class/gpio/gpio19/value
+
+if [ $board == 'leonardo' ]; then
+   avrdude -c linuxgpio -C /etc/avrdude.conf -p m32u4 -U lfuse:w:0xFF:m -U hfuse:w:0xD8:m -U efuse:w:0xCB:m -Uflash:w:$1:i $2
+elif [ $board == 'uno' ]; then
+  avrdude -c linuxgpio -C /etc/avrdude.conf -p m328p -U lfuse:w:0xFF:m -U hfuse:w:0xDE:m -U efuse:w:0x05:m -Uflash:w:$1:i $2
+elif [ $board == 'duemilanove328' ]; then
+  avrdude -c linuxgpio -C /etc/avrdude.conf -p m328 -U lfuse:w:0xFF:m -U hfuse:w:0xDA:m -U efuse:w:0x05:m -Uflash:w:$1:i $2
+elif [ $board == 'duemilanove168' ]; then
+  avrdude -c linuxgpio -C /etc/avrdude.conf -p m168 -U lfuse:w:0xFF:m -U hfuse:w:0xDD:m -U efuse:w:0x00:m -Uflash:w:$1:i $2
+elif [ $board == 'mega2560' ]; then
+  avrdude -c linuxgpio -C /etc/avrdude.conf -p m2560 -U lfuse:w:0xFF:m -U hfuse:w:0xD8:m -U efuse:w:0xFD:m -Uflash:w:$1:i $2
+fi
+
+echo 0 > /sys/class/gpio/gpio19/value
