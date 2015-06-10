@@ -17,9 +17,15 @@
 #define SOCKET_BUFLEN 1500	/* One standard MTU unit size */ 
 #define PORT 9930
 #define SIOD_ID	"1000"		/* The ID of the SIOD. Must be unique 4 digit number */
+#define GPIO_NUMBER	10	/* We have that many GPIOs */
+#define STR_MAX		100	/* Maximum string length */
+
+int gpio[GPIO_NUMBER] ={0, 1, 13, 14, 15,16,17, 24, 26, 27};
+
 
 int strfind(const char *s1, const char *s2);
-int process_data(char *datagram, int n);
+int process_data(char *datagram);
+void RemoveSpaces(char* source);
 
 int verbose=0; 	/* get value from the command line */
 
@@ -46,6 +52,11 @@ int main(int argc, char **argv){
 		}
 	} else
 		printf("socket_io - rev %s\n", SOCKET_IO_REV);
+
+	
+	/* init GPIOs ======================================================== */
+	init_gpios();
+
 
 	/* Socket Stuff ====================================================== */
 	/* create UDP socket */
@@ -116,6 +127,34 @@ int main(int argc, char **argv){
 
 }
 
+/*
+ * Set all GPIOs as outputs 
+ */
+int init_gpios(void){
+	
+	int i, n ,fd, gpio_val_fd[GPIO_NUMBER];
+	char str[STR_MAX];
+
+	/* export the GPIOs */
+	fd = open("/sys/class/gpio/export", O_WRONLY);
+	for(i=0;i<GPIO_NUMBER;i++){
+		n = snprintf(str, STR_MAX, "%d", gpio[i]);
+		write(fd, str, n);
+	}
+	close(fd);
+
+	/* set GPIOs as outputs and set them low */
+	for(i=0;i<GPIO_NUMBER;i++){
+		n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", gpio[i]);
+		fd = open(str, O_WRONLY);
+                write(fd, "low", 3);
+		close(fd);
+        }
+	
+	return 0; 
+
+}
+
 /* process the data coming from the udp socket
  * data - the command coming from the socket.
  *	  Zero terminated string assumed 
@@ -130,36 +169,56 @@ int main(int argc, char **argv){
  */
 int process_data(char *data){
 		
-	char str[10];
-	int port, val, len=strlen(data);
+	char str[STR_MAX];
+	int fd, n, port, val, len=strlen(data);
 
 	RemoveSpaces(data);
 
-	if(strncmp(data, SIOD_ID, 4)){
+	if(len<3 || tolower(data[0]) != 's' ||  tolower(data[1]) != 'e' || tolower(data[2]) != 't' ){
+		if(verbose ==2) printf("Wrong command format. At the moment command should start with SET\n");  
+                return -1; 
+	}
+
+
+	if(len>6 && strncmp(data+3, SIOD_ID, 4)){
 		if(verbose ==2) printf("The SIOD_ID doesn't match\n");	
 		return -1; 
 	}
 
-	if(len>4) 
-		port=data[4]+'0';
+	if(len>7) 
+		port=data[7]-'0';
 	else{
 		if(verbose ==2) printf("Port is not specified\n");
 		return -1; 
 	}
 
-	if(len>5)                
-		val=data[5]+'0';
+	if(len>8)                
+		val=data[8]-'0';
         else{
                 if(verbose ==2) printf("Value is not specified\n");
                 return -1; 
         }
 
-	
+	if(len>9){
+                if(verbose ==2) printf("command line is to long \n");
+                return -1; 
+        } 
+
+	/* set the GPIO as per the command */
+	if(verbose ==2) printf("SET: GPIO[%d] = %d\n", gpio[port], val);
+	n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", gpio[port]);
+	fd = open(str, O_WRONLY);
+	n = snprintf(str, STR_MAX, "%d", val);
+	write(fd, str, n);
+	close(fd);
+
 	return 0;
 
 }
 
-
+/*
+ * Removes spaces in string
+ */
 void RemoveSpaces(char* source)
 {
 	char *i = source;
@@ -173,8 +232,10 @@ void RemoveSpaces(char* source)
   	*i = 0;
 }
 
-//The function searches for the posible match of s2 inside s1
-//Returns 0 if match found 
+/*
+ * The function searches for the posible match of s2 inside s1
+ * Returns 0 if match found 
+ */
 int strfind(const char *s1, const char *s2){
 
         int i, len1, len2;
@@ -193,6 +254,7 @@ int strfind(const char *s1, const char *s2){
                 return -1;
         else
                 return 0; /* match found */
+
 
 }
 
