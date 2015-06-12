@@ -38,6 +38,7 @@ include $(INCLUDE_DIR)/package.mk
 define Package/socket_io
 	SECTION:=utils
 	CATEGORY:=Utilities
+	DEPENDS:=+libuci
 	TITLE:=Listening socket server controlling discrete I/O ports 
 endef
 
@@ -59,10 +60,12 @@ define Build/Prepare
 	$(CP) ./src/* $(PKG_BUILD_DIR)/
 endef
 
-
+TARGET_LDFLAGS += -luci
 # We do not need to define Build/Configure or Build/Compile directives
 # The defaults are appropriate for compiling a simple program such as this one
-
+#define Build/Compile
+#	$(MAKE) -C $(PKG_BUILD_DIR) $(TARGET_CONFIGURE_OPTS) -luci
+#endef
 
 # Specify where and how to install the program. Since we only have one file at the moment, 
 # the socket_io executable, install it by copying it to the /bin directory on
@@ -74,6 +77,9 @@ endef
 define Package/socket_io/install
 	$(INSTALL_DIR) $(1)/bin
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/socket_io $(1)/bin/
+
+	$(INSTALL_DIR) $(1)/etc/config
+	$(INSTALL_BIN) ./files/siod $(1)/etc/config/siod
 endef
 
 

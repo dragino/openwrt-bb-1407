@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <termios.h>
+#include <uci.h>
 
 #define SOCKET_IO_REV   "0.1"
 
@@ -17,15 +18,26 @@
 #define SOCKET_BUFLEN 1500	/* One standard MTU unit size */ 
 #define PORT 9930
 #define SIOD_ID	"1000"		/* The ID of the SIOD. Must be unique 4 digit number */
-#define GPIO_NUMBER	10	/* We have that many GPIOs */
+#define GPIO_MAX_NUMBER	10	/* We have that many GPIOs */
 #define STR_MAX		100	/* Maximum string length */
 
-int gpio[GPIO_NUMBER] ={0, 1, 13, 14, 15,16,17, 24, 26, 27};
+struct gpio {
+	int number;		/* Number of the GPIO of teh AR9331 SoC*/
+	int direction;		/* can be 0 for output or 1 for input */
+	int value;		/* current value, can be 0 or 1. The state 
+				   of the inputs is known only at the moment of reading it*/ 
+			
+};
+struct {
+	int gpios_count;
+	struct gpio gpios[GPIO_MAX_NUMBER];
+	} gpios;
 
 
 int strfind(const char *s1, const char *s2);
 int process_data(char *datagram);
 void RemoveSpaces(char* source);
+int read_config(void);
 
 int verbose=0; 	/* get value from the command line */
 
@@ -53,9 +65,11 @@ int main(int argc, char **argv){
 	} else
 		printf("socket_io - rev %s\n", SOCKET_IO_REV);
 
-	
+	/* read GPIO config ================================================== */
+	read_config();	
+
 	/* init GPIOs ======================================================== */
-	init_gpios();
+	//init_gpios();
 
 
 	/* Socket Stuff ====================================================== */
@@ -128,23 +142,106 @@ int main(int argc, char **argv){
 }
 
 /*
+ * Read config file and populate the gpios 
+ */
+int read_config(void){
+
+	struct  uci_ptr ptr;
+	struct  uci_context *c;
+	struct uci_element *e1, *e2;
+	const char *cur_section_ref = NULL;
+	char str[STR_MAX];
+	int fd, n, number;
+
+	if(!(c = uci_alloc_context())){ 
+		printf("Can not allocate the uci_context\n");
+		return -1;
+	}
+
+	if ((uci_lookup_ptr(c, &ptr, "siod", true) != UCI_OK)) { 
+		printf("uci_lookup_ptr failed\n");
+		uci_free_context(c);
+		return -1;
+	}
+
+	if (!(ptr.flags & UCI_LOOKUP_COMPLETE)) {
+		c->err = UCI_ERR_NOTFOUND;
+		printf("uci redaing didn't complete\n");
+		return -1;
+	}
+
+	uci_foreach_element( &ptr.p->sections, e1) {
+		struct uci_section *s = uci_to_section(e1);
+		uci_foreach_element(&s->options, e2) {
+			struct uci_option *o = uci_to_option(e2);
+				
+			if (!strcmp(e2->name, "number")){
+				fd = open("/sys/class/gpio/export", O_WRONLY);
+				n = snprintf(str, STR_MAX, "%s", o->v.string);
+				write(fd, str, n);
+				close(fd);
+				number=atoi(o->v.string);
+
+                                gpios.gpios[atoi(e1->name)].number=number;
+				gpios.gpios_count = atoi(e1->name) + 1;
+
+			} else if (!strcmp(e2->name, "direction")){
+				n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", number);
+				fd = open(str, O_WRONLY);
+				n = snprintf(str, STR_MAX, "%s", o->v.string);
+				write(fd, str, n);
+				close(fd);
+				if (!strcmp(o->v.string, "out")) 
+					gpios.gpios[atoi(e1->name)].direction=0;
+				else
+					gpios.gpios[atoi(e1->name)].direction=1;
+				
+			} else if (!strcmp(e2->name, "initialize")){
+				n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", number);
+				fd = open(str, O_WRONLY);
+				n = snprintf(str, STR_MAX, "%s", o->v.string);
+				write(fd, str, n);
+				close(fd);
+				if (!strcmp(o->v.string, "1"))    
+                                        gpios.gpios[atoi(e1->name)].value=1;
+                                else
+                                        gpios.gpios[atoi(e1->name)].value=0;
+			}
+		}
+	}
+	
+	if(verbose ==2) printf("GPIOs are configured as per the configuration file\n");	
+
+	for(n=0;n<gpios.gpios_count; n++){
+		printf("gpios[%d].number=%d\n", n, gpios.gpios[n].number);
+		printf("gpios[%d].direction=%d\n", n, gpios.gpios[n].direction);
+		printf("gpios[%d].value=%d\n", n, gpios.gpios[n].value);
+	}
+		
+
+	return 0;
+}
+
+
+/*
  * Set all GPIOs as outputs 
  */
+#ifdef alabala
 int init_gpios(void){
 	
-	int i, n ,fd, gpio_val_fd[GPIO_NUMBER];
+	int i, n ,fd, gpio_val_fd[GPIO_MAX_NUMBER];
 	char str[STR_MAX];
 
 	/* export the GPIOs */
 	fd = open("/sys/class/gpio/export", O_WRONLY);
-	for(i=0;i<GPIO_NUMBER;i++){
+	for(i=0;i<GPIO_MAX_NUMBER;i++){
 		n = snprintf(str, STR_MAX, "%d", gpio[i]);
 		write(fd, str, n);
 	}
 	close(fd);
 
 	/* set GPIOs as outputs and set them low */
-	for(i=0;i<GPIO_NUMBER;i++){
+	for(i=0;i<GPIO_MAX_NUMBER;i++){
 		n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", gpio[i]);
 		fd = open(str, O_WRONLY);
                 write(fd, "low", 3);
@@ -154,6 +251,7 @@ int init_gpios(void){
 	return 0; 
 
 }
+#endif
 
 /* process the data coming from the udp socket
  * data - the command coming from the socket.
@@ -205,8 +303,8 @@ int process_data(char *data){
         } 
 
 	/* set the GPIO as per the command */
-	if(verbose ==2) printf("SET: GPIO[%d] = %d\n", gpio[port], val);
-	n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", gpio[port]);
+	//if(verbose ==2) printf("SET: GPIO[%d] = %d\n", gpio[port], val);
+	//n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", gpio[port]);
 	fd = open(str, O_WRONLY);
 	n = snprintf(str, STR_MAX, "%d", val);
 	write(fd, str, n);

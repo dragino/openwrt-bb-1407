@@ -1,0 +1,37 @@
+
+package 'siod'
+
+config gpio '0'
+	option number '1' 
+	option direction 'out'
+	option initialize '1' 
+
+config gpio '1'
+	option number '14' 
+	option direction 'out'
+	option initialize '1' 
+
+config gpio '2'
+	option number '15' 
+	option direction 'in'
+
+config gpio '3'
+	option number '16' 
+	option direction 'out'
+	option initialize '1' 
+
+config gpio '4'
+	option number '24' 
+	option direction 'out'
+	option initialize '1' 
+
+config gpio '5'
+	option number '26' 
+	option direction 'out'
+	option initialize '0'
+
+config gpio '6'
+	option number '27' 
+	option direction 'out'
+	option initialize '1' 
+
