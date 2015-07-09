@@ -1,0 +1,14 @@
+#!/bin/sh
+
+MODEL=""
+
+MODEL_MW3200=`cat /etc/banner | grep '\-MW3200\-'`
+
+[ ! -z "$MODEL_MW3200" ] && MODEL='MW3200'
+
+if [ $MODEL == 'MW3200' ];then
+	mv /usr/bin/foxconn.init /etc/init.d/foxconn
+	/etc/init.d/foxconn stop
+	/etc/init.d/foxconn start
+fi
+

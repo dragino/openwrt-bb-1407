@@ -1,0 +1,47 @@
+#!/bin/sh /etc/rc.common
+# Copyright (c) 2012 Edwin Chen <edwin@dragino.com>
+
+START=99
+
+start()
+{
+	#Use GPIO19 to control USB Power
+	[ ! -d /sys/class/gpio/gpio19 ] && echo 19 > /sys/class/gpio/export && echo "out" > /sys/class/gpio/gpio19/direction
+	echo 1 > /sys/class/gpio/gpio19/value
+
+	/usr/bin/lua /usr/bin/process_AT_feedback MI660 0 &
+	/usr/bin/check_3g_status.sh &
+	/usr/bin/lua /usr/bin/QuaiKe.sock &
+	
+	/usr/bin/lua /usr/bin/check_client &
+	
+	/bin/kuaike_app &
+	
+	/usr/bin/auto-detect-media-server &
+	
+	/usr/bin/auto_update_packages.sh &
+	/usr/bin/update_control_list.sh &
+
+	[ ! -d /root/usbsys/data ] && mkdir -p /root/usbsys/data
+    mkdir /var/usbsys
+    ln -sf /root/usbsys/data /var/usbsys/data
+	
+	if [ ! -f /etc/version ];then 
+		VERSION_MAIN=`cat /etc/banner | grep 'Version' | awk -F '-' '{print $5}'`
+		VERSION_SUB=`opkg status foxconn-bus-lan | grep Version | awk '{print $2}'`
+		echo "$VERSION_MAIN" > /etc/version
+	fi
+	
+	sleep 20
+	/mnt/tmp/wifi_device &
+	
+}
+
+stop()
+{
+	ps | grep "check_client" | grep -v grep | awk '{print $1}' | xargs kill -s 9
+	ps | grep "QuaiKe.sock" | grep -v grep | awk '{print $1}' | xargs kill -s 9
+	ps | grep "check_3g_status" | grep -v grep | awk '{print $1}' | xargs kill -s 9
+	ps | grep "kuaike_app" | grep -v grep | awk '{print $1}' | xargs kill -s 9
+	ps | grep "process_AT" | grep -v grep | awk '{print $1}' | xargs kill -s 9
+}
