@@ -1,0 +1,24 @@
+#!/bin/sh
+
+# auto detect Media server and add to trusted MAC address 
+
+MEDIA_SERVER_IP=192.168.1.254
+MAX_WARN=5
+CUR_WARN=1
+while [ -z "$media_mac" ] ; do
+	media_mac=`cat /proc/net/arp | grep $MEDIA_SERVER_IP | awk '{print $4}'`
+	if [ $CUR_WARN -le $MAX_WARN ];then
+		logger "Can't Find Media Server"
+		CUR_WARN=`expr $CUR_WARN + 1`
+	fi
+	sleep 5
+done
+
+has_list=`cat /etc/nodogsplash/nodogsplash.conf | grep $media_mac` 
+echo $has_list
+if [ -z "$has_list" ] ; then
+	uci add_list nodogsplash.whitelist.mac=$media_mac
+	uci commit nodogsplash
+	lua /usr/bin/uci2nds.lua
+	/etc/init.d/nodogsplash restart
+fi 

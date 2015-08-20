@@ -1,9 +1,20 @@
-src-git packages https://github.com/openwrt/packages.git;for-14.07
-src-git routing https://github.com/openwrt-routing/packages.git;for-14.07
-src-git telephony http://git.openwrt.org/feed/telephony.git;for-14.07
-src-git management https://github.com/openwrt-management/packages.git;for-14.07
-src-git oldpackages http://git.openwrt.org/14.07/packages.git
-src-git alljoyn https://git.allseenalliance.org/gerrit/core/openwrt_feed;barrier_breaker
+#Use Local Source so change on the git/svn won't affect the build process.
+#For up-to-date source, comment the src-link one and uncomment the src-git/src-svn one
+src-link packages ../../packages-14.07/packages
+src-link telephony ../../packages-14.07/telephony
+src-link management ../../packages-14.07/management
+src-link oldpackages ../../packages-14.07/oldpackages
+src-link alljoyn ../../packages-14.07/alljoyn
+
+src-link dragino ../../dragino-packages
+src-link luci ../../luci-0.12
+src-link routing ../../routing
+
+#src-git packages https://github.com/openwrt/packages.git;for-14.07
+#src-git telephony http://git.openwrt.org/feed/telephony.git;for-14.07
+#src-git management https://github.com/openwrt-management/packages.git;for-14.07
+#src-git oldpackages http://git.openwrt.org/14.07/packages.git
+#src-git alljoyn https://git.allseenalliance.org/gerrit/core/openwrt_feed;barrier_breaker
 #src-svn xwrt http://x-wrt.googlecode.com/svn/trunk/package
 #src-svn phone svn://svn.openwrt.org/openwrt/feeds/phone
 #src-svn efl svn://svn.openwrt.org/openwrt/feeds/efl
@@ -12,5 +23,3 @@ src-git alljoyn https://git.allseenalliance.org/gerrit/core/openwrt_feed;barrier
 #src-svn xfce svn://svn.openwrt.org/openwrt/feeds/xfce
 #src-svn lxde svn://svn.openwrt.org/openwrt/feeds/lxde
 #src-link custom /usr/src/openwrt/custom-feed
-src-link dragino ../../dragino-packages
-src-link luci ../../luci-0.12

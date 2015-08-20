@@ -131,6 +131,7 @@ function updateUSERLIST(user_table)
   os.execute('sed -i \'/'..user_table.MAC..'/d\' ' ..USERLIST)
   os.execute('echo "'..user_table.MAC .. '|'..user_table.TYPE .. '" >> '.. USERLIST)
   os.execute('ndsctl deauth '.. user_table.IP) 
+  os.execute('/usr/bin/traffic_control.sh') 
   return luci_util.exec('ndsctl auth '.. user_table.IP)
 end
 

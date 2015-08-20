@@ -1,0 +1,35 @@
+<%+header%>
+
+<%+commotion-splash/splashtext%>
+
+<% require "luci.http"
+   local authtarget=luci.http.formvalue("authtarget")
+   local server, splash, redir, tok = authtarget:match("(http://[^:]+)([:%d]*/.*)(redir=.*)&(tok=.*)")
+   local newredir = server .. controller
+   newredir = newredir:gsub(":","#3A"):gsub("/","#2F"):gsub("#","%%")
+%>
+
+<div>
+
+<% require "luci.model.ipkg"
+if luci.model.ipkg.installed("luci-commotion-apps") then   %>
+<div id="local">
+ <a href="<%=server .. splash .. 'redir=' .. newredir .. '%2Fapps&amp;' .. tok%>">
+  <img src="<%=media%>/apps.128.png" alt="<%:Local Applications%>" title="<%:Local Applications%>" />
+  <p><%:Local Applications%></p>
+ </a>
+</div>
+
+<% end %>
+
+
+<div id="internet">
+ <a href="<% require "luci.http" %><%=server .. splash .. redir .. '&amp;' .. tok%>">
+  <img src="<%=media%>/internet.128.png" alt="<%:Internet%>" title="<%:Internet%>" />
+  <p><%:Internet%></p>
+ </a>
+</div>
+
+</div>
+
+<%+footer%>
