@@ -4,7 +4,7 @@
 SFLAG=
 AFLAG=
 
-APP=common
+APP=SIOD
 
 REPO_PATH=$(pwd)
 VERSION=3.0.1

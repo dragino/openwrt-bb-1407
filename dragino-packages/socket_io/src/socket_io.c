@@ -21,17 +21,28 @@
 #define GPIO_MAX_NUMBER	10	/* We have that many GPIOs */
 #define STR_MAX		100	/* Maximum string length */
 
+enum {OUT, IN };
 struct gpio {
-	int number;		/* Number of the GPIO of teh AR9331 SoC*/
+	int number;		/* Number of the GPIO of the AR9331 SoC */
+	int index;		/* This is how the IO are refered in the wireless mesh */
 	int direction;		/* can be 0 for output or 1 for input */
 	int value;		/* current value, can be 0 or 1. The state 
 				   of the inputs is known only at the moment of reading it*/ 
 			
 };
-struct {
-	int gpios_count;
+struct {		
+	int gpios_count;	/* We have that many IOs in the current SIOD */
 	struct gpio gpios[GPIO_MAX_NUMBER];
-	} gpios;
+	} gpios;		/* Keeps the state of the local IOs */
+
+
+typedef struct GST_node GST_node;
+struct GST_node {
+	int siod_id;		/* ID of the SIOD */					
+	struct gpios;		/* gpios.gpio.number is populated only for the local IOs */
+	struct GST_node *next;  /* points to the next element in the list */ 
+	struct GST_node *prev;	/* points to the previous element in the list */
+	} *GST;			/* Keeps the status of all IOs of all nodes including the local node */
 
 
 int strfind(const char *s1, const char *s2);
@@ -68,12 +79,18 @@ int main(int argc, char **argv){
 	/* read GPIO config ================================================== */
 	read_config();	
 
-	/* init GPIOs ======================================================== */
-	//init_gpios();
+	/* Update GST with the local IOs  ==================================== */
+	GST = malloc(sizeof(GST_node));
+	GST->siod_id = atoi(SIOD_ID);
+	GST->next=NULL;  
+	GST->prev=NULL;
+	GST->gpios = gpios;
 
 
-	/* Socket Stuff ====================================================== */
-	/* create UDP socket */
+	/* Broadcast PUT commands  =========================================== */
+	
+
+	/* Start UDP Socket server and listening for commands ================ */
 	udpfd = socket(AF_INET, SOCK_DGRAM, 0);
 	if(udpfd == -1){
                 perror("socket() failed");
@@ -90,6 +107,8 @@ int main(int argc, char **argv){
 		perror("bind() failed");
 		exit(-1);
 	}
+
+	if(verbose) printf("Listening on port %d\n", PORT);	
 
 	for ( ; ; ) {
 
@@ -172,6 +191,7 @@ int read_config(void){
 
 	uci_foreach_element( &ptr.p->sections, e1) {
 		struct uci_section *s = uci_to_section(e1);
+		gpios.gpios[atoi(e1->name)].index = atoi(e1->name);
 		uci_foreach_element(&s->options, e2) {
 			struct uci_option *o = uci_to_option(e2);
 				
@@ -223,93 +243,135 @@ int read_config(void){
 }
 
 
-/*
- * Set all GPIOs as outputs 
- */
-#ifdef alabala
-int init_gpios(void){
-	
-	int i, n ,fd, gpio_val_fd[GPIO_MAX_NUMBER];
-	char str[STR_MAX];
-
-	/* export the GPIOs */
-	fd = open("/sys/class/gpio/export", O_WRONLY);
-	for(i=0;i<GPIO_MAX_NUMBER;i++){
-		n = snprintf(str, STR_MAX, "%d", gpio[i]);
-		write(fd, str, n);
-	}
-	close(fd);
-
-	/* set GPIOs as outputs and set them low */
-	for(i=0;i<GPIO_MAX_NUMBER;i++){
-		n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", gpio[i]);
-		fd = open(str, O_WRONLY);
-                write(fd, "low", 3);
-		close(fd);
-        }
-	
-	return 0; 
-
-}
-#endif
-
 /* process the data coming from the udp socket
  * data - the command coming from the socket.
  *	  Zero terminated string assumed 
  *
  *
- * supported format is :
+ * supported formats are: (note that the spaces in the commands are optional)
  *
- *	SET 5000XY
+ *   Command to set local output 
  *
- *	X = input/output number [0 .. 9]
- *	Y = Active / not active [0, 1]
+ *    SET AAAA X Y
+ *
+ *	  AAAA = ID of the SIOD
+ *	  X    = number of an output [0, 1, .. 9]
+ *	       if X is not an output the command is ignored 		
+ *	  Y    = Active / not active [0, 1]
+ *
+ *   Comand to request the state of the local input
+ *
+ *
+ *    GET AAAA X Y
+ *
+ *        AAAA = ID of the SIOD
+ *        X    = number of input/output [0, 1, .. 9]
+ *        Y    = Active / not active [0, 1]
+ *
+ *
+ *   Command to update the global status table (GST) with the current IO states
+ *
+ *
+ *    PUT AAAA X Y
+ *
+ *        AAAA = ID of the SIOD
+ *        X    = number of input/output [0, 1, .. 9]
+ *        Y    = Active / not active [0, 1]
+ *
+ * 
+ *   Command to update the global status table (GST) with the IO type
+ *
+ *
+ *    MOD AAAA X Y
+ *
+ *        AAAA = ID of the SIOD
+ *        X    = number of input/output [0, 1, .. 9]
+ *        Y    = IO type 0 - output, 1 - input 
+ *	 	
  */
+enum {SET, GET, PUT, MOD };
 int process_data(char *data){
 		
 	char str[STR_MAX];
-	int fd, n, port, val, len=strlen(data);
+	int fd, n, cmd, AAAA, X, Y, len=strlen(data);
 
 	RemoveSpaces(data);
 
-	if(len<3 || tolower(data[0]) != 's' ||  tolower(data[1]) != 'e' || tolower(data[2]) != 't' ){
+/*	if(len<3 || tolower(data[0]) != 's' ||  tolower(data[1]) != 'e' || tolower(data[2]) != 't' ){
 		if(verbose ==2) printf("Wrong command format. At the moment command should start with SET\n");  
                 return -1; 
 	}
+*/
+	if strncmp(data, "SET", 3) {
+		cmd = SET;
+	} else if strncmp(data, "GET", 3) {
+		cmd = GET;
+	} else if strncmp(data, "PUT", 3) {
+		cmd = PUT;
+	} else if strncmp(data, "MOD", 3) {
+		cmd = MOD;
+	} else {
+		if(verbose) printf("Wrong command.\n");
+		return -1;
+	}
+		
 
-
-	if(len>6 && strncmp(data+3, SIOD_ID, 4)){
-		if(verbose ==2) printf("The SIOD_ID doesn't match\n");	
+	if(len>6) {
+		AAAA=atoin(data+3, 4);
+	} else {
+		if(verbose) printf("SIOD_ID is missing\n");	
 		return -1; 
 	}
 
 	if(len>7) 
-		port=data[7]-'0';
+		X=data[7]-'0';
 	else{
-		if(verbose ==2) printf("Port is not specified\n");
+		if(verbose) printf("IO is not specified\n");
 		return -1; 
 	}
 
 	if(len>8)                
-		val=data[8]-'0';
+		Y=data[8]-'0';
         else{
-                if(verbose ==2) printf("Value is not specified\n");
+                if(verbose) printf("Value or type is not specified\n");
                 return -1; 
         }
 
 	if(len>9){
-                if(verbose ==2) printf("command line is to long \n");
+                if(verbose) printf("command line is to long \n");
                 return -1; 
         } 
 
-	/* set the GPIO as per the command */
-	//if(verbose ==2) printf("SET: GPIO[%d] = %d\n", gpio[port], val);
-	//n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", gpio[port]);
-	fd = open(str, O_WRONLY);
-	n = snprintf(str, STR_MAX, "%d", val);
-	write(fd, str, n);
-	close(fd);
+	switch (cmd){
+	
+		case SET:/* set the GPIO as per the command */
+			if (gpios.gpio[X].direction != OUT){
+				if(verbose) printf("SET command tries to set value to an input, ignoring\n");
+				return -1;
+			} else if (X > gpios.gpios_count-1) {
+				if(verbose) printf("Output out of range, ignoring\n");
+				return -1;
+			}
+			if(verbose ==2) printf("SET: GPIO%d = %d\n", gpios.gpio[X].number, Y);
+			n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", gpios.gpio[X].number);
+			fd = open(str, O_WRONLY);
+			n = snprintf(str, STR_MAX, "%d", Y);
+			write(fd, str, n);
+			close(fd);
 
+			break;
+
+		case GET:
+			break;
+
+		case PUT:
+
+			break;
+
+		case MOD:
+			break;
+
+	}
 	return 0;
 
 }
