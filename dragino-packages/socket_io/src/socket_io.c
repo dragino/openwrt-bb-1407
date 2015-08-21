@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <uci.h>
+#include <arpa/inet.h>
 
 #define SOCKET_IO_REV   "0.1"
 
@@ -19,18 +20,19 @@
 #define PORT 9930
 #define SIOD_ID	"1000"		/* The ID of the SIOD. Must be unique 4 digit number */
 #define GPIO_MAX_NUMBER	10	/* We have that many GPIOs */
-#define STR_MAX		100	/* Maximum string length */
+#define STR_MAX		100		/* Maximum string length */
+#define UDP_ARGS_MAX 20		/* we can have that much arguments ('/' separated) in the UDP datagram */ 
 
 enum {OUT, IN };
 struct gpio {
 	int number;		/* Number of the GPIO of the AR9331 SoC */
 	int index;		/* This is how the IO are refered in the wireless mesh */
-	int direction;		/* can be 0 for output or 1 for input */
+	int direction;	/* can be 0 for output or 1 for input */
 	int value;		/* current value, can be 0 or 1. The state 
-				   of the inputs is known only at the moment of reading it*/ 
-			
+				       of the inputs is known only at the moment of reading it */ 
 };
-struct {		
+
+struct gpios_tag {		
 	int gpios_count;	/* We have that many IOs in the current SIOD */
 	struct gpio gpios[GPIO_MAX_NUMBER];
 	} gpios;		/* Keeps the state of the local IOs */
@@ -39,16 +41,34 @@ struct {
 typedef struct GST_node GST_node;
 struct GST_node {
 	int siod_id;		/* ID of the SIOD */					
-	struct gpios;		/* gpios.gpio.number is populated only for the local IOs */
+	struct gpios_tag gpios;		/* gpios.gpio.number is populated only for the local IOs */
 	struct GST_node *next;  /* points to the next element in the list */ 
 	struct GST_node *prev;	/* points to the previous element in the list */
 	} *GST;			/* Keeps the status of all IOs of all nodes including the local node */
 
 
 int strfind(const char *s1, const char *s2);
-int process_data(char *datagram);
+int process_udp(int udpfd, char *datagram, struct sockaddr_in cliaddr, socklen_t addrlen);
 void RemoveSpaces(char* source);
 int read_config(void);
+int extract_args(char *datagram, char *args[], int *n_args);
+char *strupr(char *s);
+unsigned long long MACaddress_str2num(char *MACaddress);
+void MACaddress_num2str(unsigned long long MACaddress, char *MACaddress_str);
+unsigned long IPaddress_str2num(char *IPaddress);
+void IPaddress_num2str(unsigned long IPaddress, char *IPaddress_str);
+unsigned long long eth0MAC(void);
+int getnet(const char *net, const char *param, char *value);
+int setnet(const char *net, const char *param, const char *value);
+
+enum {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
+	  RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, AsteriskStatRes, \
+	  ConfigNTP, Set, SetIf, TimeRange, TimeRangeOut, Get, Put, Req, Mod, \
+	  GSTCheckSumReq, GSTCheckSum, GSTReq, GSTdata, Ping, PingRes};
+char *cmds[26]={"ConfigBatmanReq", "ConfigBatmanRes", "ConfigBatman", "ConfigReq", "ConfigRes", "Config", \
+      "RestartNetworkService", "RestartAsterisk", "ConfigAsterisk", "AsteriskStatReq", "AsteriskStatRes", \
+      "ConfigNTP", "Set", "SetIf", "TimeRange", "TimeRangeOut", "Get", "Put", "Req", "Mod", \
+      "GSTCheckSumReq", "GSTCheckSum", "GSTReq", "GSTdata", "Ping", "PingRes"};
 
 int verbose=0; 	/* get value from the command line */
 
@@ -57,12 +77,23 @@ int main(int argc, char **argv){
 	int udpfd, n, nready; 
 	char datagram[SOCKET_BUFLEN];
 	fd_set rset;
-	socklen_t len;
+	socklen_t addrlen;
 	struct sockaddr_in servaddr, cliaddr;
 	struct timeval	timeout;
 	int res;	
 
 	/* Splash ============================================================ */
+
+	{
+		char value[STR_MAX];		
+	
+        if(setnet("lan", "proto", "penev"))
+			printf("error\n");
+		else 
+        	printf("proto=alabala\n");
+
+	}
+
 
 	/* Check for verbosity argument */
 	if(argc>1) {
@@ -84,7 +115,7 @@ int main(int argc, char **argv){
 	GST->siod_id = atoi(SIOD_ID);
 	GST->next=NULL;  
 	GST->prev=NULL;
-	GST->gpios = gpios;
+	GST->gpios = gpios; // What I am wanted to do ???????????????????????????????????????
 
 
 	/* Broadcast PUT commands  =========================================== */
@@ -132,8 +163,8 @@ int main(int argc, char **argv){
 		} else if (nready) {
 			/* We have data to read */
 				
-			len=sizeof(cliaddr);
-			if((n = recvfrom(udpfd, datagram, SOCKET_BUFLEN, 0, (struct sockaddr *)&cliaddr, &len))<0){
+			addrlen=sizeof(cliaddr);
+			if((n = recvfrom(udpfd, datagram, SOCKET_BUFLEN, 0, (struct sockaddr *)&cliaddr, &addrlen))<0){
 				/* System error */
 
 				perror("recvfrom() failed");
@@ -141,10 +172,10 @@ int main(int argc, char **argv){
 			} else if (n>0){
 				/* We have got an n byte datagram */
 				datagram[n] = '\0';
-				process_data(datagram);
+				process_udp(udpfd, datagram, cliaddr, addrlen);
 
-                        	/* Send it back */
-                        	//sendto(udpfd, datagram, n, 0, &cliaddr, len);		
+				/* Send it back */
+				//sendto(udpfd, datagram, n, 0, &cliaddr, addrlen);		
 	
 			} else {
 				/* The socket closed, this should not happen with UDP */
@@ -202,7 +233,7 @@ int read_config(void){
 				close(fd);
 				number=atoi(o->v.string);
 
-                                gpios.gpios[atoi(e1->name)].number=number;
+				gpios.gpios[atoi(e1->name)].number=number;
 				gpios.gpios_count = atoi(e1->name) + 1;
 
 			} else if (!strcmp(e2->name, "direction")){
@@ -289,32 +320,150 @@ int read_config(void){
  *        Y    = IO type 0 - output, 1 - input 
  *	 	
  */
-enum {SET, GET, PUT, MOD };
-int process_data(char *data){
-		
-	char str[STR_MAX];
-	int fd, n, cmd, AAAA, X, Y, len=strlen(data);
 
-	RemoveSpaces(data);
-
-/*	if(len<3 || tolower(data[0]) != 's' ||  tolower(data[1]) != 'e' || tolower(data[2]) != 't' ){
-		if(verbose ==2) printf("Wrong command format. At the moment command should start with SET\n");  
-                return -1; 
-	}
-*/
-	if strncmp(data, "SET", 3) {
-		cmd = SET;
-	} else if strncmp(data, "GET", 3) {
-		cmd = GET;
-	} else if strncmp(data, "PUT", 3) {
-		cmd = PUT;
-	} else if strncmp(data, "MOD", 3) {
-		cmd = MOD;
-	} else {
-		if(verbose) printf("Wrong command.\n");
-		return -1;
-	}
+int process_udp(int udpfd, char *datagram, struct sockaddr_in cliaddr, socklen_t addrlen){
 		
+	int len=strlen(datagram), n_args;
+	char *args[UDP_ARGS_MAX];  	
+
+	/* We process only datagrams starting with JNTCIT */
+	if ((len<7) || !strncmp(datagram, "JNTCIT/", 7)){
+		if(verbose) printf("unrelated datagram => %s\n", datagram);
+		return 0;
+	} else
+		datagram = datagram + 7;
+
+	/* UDP pre processing */
+	RemoveSpaces(datagram);
+	datagram = strupr(datagram);
+	
+	/* extract arguments */
+	extract_args(datagram, args, &n_args);
+
+
+	switch (hashit(args[0])){
+
+		case ConfigBatmanReq:{
+
+
+
+			}
+			break;
+        case ConfigBatmanRes:{
+			/* We may fill our table about the available MACaddresses in the mesh */
+			char *MACaddress = args[1];
+						
+
+
+            }
+            break;
+        case ConfigBatman:{
+
+            }
+            break;
+        case ConfigReq:{
+
+            }
+            break;
+        case ConfigRes:{
+
+            }
+            break;
+        case Config:{
+
+            }
+            break;
+        case RestartNetworkService:{
+
+            }
+            break;
+        case RestartAsterisk:{
+
+            }
+            break;
+        case ConfigAsterisk:{
+
+            }
+            break;
+        case AsteriskStatReq:{
+
+            }
+            break;
+        case AsteriskStatRes:{
+
+            }
+            break;
+        case ConfigNTP:{
+
+            }
+            break;
+        case Set:{
+
+            }
+            break;
+        case SetIf:{
+
+            }
+            break;
+        case TimeRange:{
+
+            }
+            break;
+        case TimeRangeOut:{
+
+            }
+            break;        
+		case Get:{
+
+            }
+            break;        
+		case Put:{
+
+            }
+            break;        
+		case Req:{
+
+            
+            }
+            break;        
+		case Mod:{
+
+
+            }
+            break;        
+		case GSTCheckSumReq:{
+
+
+            }
+           	break;        
+		case GSTCheckSum:{
+
+            }
+            break;        
+		case GSTReq:{
+
+            }
+            break;
+        case GSTdata:{
+
+            }
+            break;
+        case Ping:{
+
+			}
+            break;
+        case PingRes:{
+
+			}
+            break;
+
+		default:
+			if(verbose) printf("Wrong command.\n");
+			return -1;
+	}
+
+
+/*
 
 	if(len>6) {
 		AAAA=atoin(data+3, 4);
@@ -344,7 +493,7 @@ int process_data(char *data){
 
 	switch (cmd){
 	
-		case SET:/* set the GPIO as per the command */
+		case SET:// set the GPIO as per the command 
 			if (gpios.gpio[X].direction != OUT){
 				if(verbose) printf("SET command tries to set value to an input, ignoring\n");
 				return -1;
@@ -372,6 +521,8 @@ int process_data(char *data){
 			break;
 
 	}
+*/
+
 	return 0;
 
 }
@@ -398,23 +549,213 @@ void RemoveSpaces(char* source)
  */
 int strfind(const char *s1, const char *s2){
 
-        int i, len1, len2;
+	int i, len1, len2;
 
-        len1=strlen(s1);
+	len1=strlen(s1);
 	len2=strlen(s2);
-        for(i=0; i<len1; i++){
+	for(i=0; i<len1; i++){
 
-                if(s1[i]==s2[0]){
-                        if (!strncmp(&(s1[i]), s2, len2)){
-                                break;
-                        }
-                }
-        }
-        if(i==len1)
-                return -1;
-        else
-                return 0; /* match found */
+		if(s1[i]==s2[0]){
+			if (!strncmp(&(s1[i]), s2, len2)){
+				break;
+			}
+		}
+	}
+
+	return (i==len1)?-1:0;
+}
+/*
+ * The function extracts the arguments from the UDP datagram. 
+ * Standard separator '/' is assumed
+ */
+int extract_args(char *datagram, char *args[], int *n_args){
+
+	int i;
+	*n_args=1;
+	args[*n_args-1]=datagram;
+	for(i=0;i<strlen(datagram); i++){
+		if(datagram[i] == '/'){
+			args[(*n_args)++]=&datagram[i+1];
+			datagram[i]='\0';
+		}
+	}	
 
 
+}
+
+/*
+ * Calculates index of the command string so we can use C switch   
+ */
+int hashit(char *cmd) {
+
+	int i;
+	for(i=0; i<sizeof(cmds)/sizeof(char *); i++){
+		if(!strcmp(cmd, cmds[i])) return i; 
+	}
+
+	return -1;
+}
+
+/*
+ * Convert MAC address in string format xx:xx:xx:xx:xx:xx into u64 value   
+ */
+unsigned long long MACaddress_str2num(char *MACaddress){
+	
+	unsigned char mac[6];
+	int ret;	
+
+	ret=sscanf(MACaddress, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &mac[5], &mac[4], &mac[3], &mac[2], &mac[1], &mac[0]);
+	if(ret == 6)
+		return (unsigned long long)mac[0] | ((unsigned long long)mac[1]<<8) | ((unsigned long long)mac[2]<<16) | ((unsigned long long)mac[3]<<24) | ((unsigned long long)mac[4]<<32) | ((unsigned long long)mac[5]<<40);
+	else {
+		if(verbose) printf("Wrong MAC address format.\n");
+		return 0;
+	}
+		
+}
+
+/*
+ * Convert MAC address from a u64 value into string format xx:xx:xx:xx:xx:xx
+ * the string should be allocated by the caller
+ */
+void MACaddress_num2str(unsigned long long MACaddress, char *MACaddress_str){
+
+
+    sprintf(MACaddress_str, "%02x:%02x:%02x:%02x:%02x:%02x", (unsigned char)(MACaddress>>40), (unsigned char)(MACaddress>>32), (unsigned char)(MACaddress>>24),
+															 (unsigned char)(MACaddress>>16), (unsigned char)(MACaddress>>8), (unsigned char)(MACaddress));
+
+}
+
+/*
+ * Convert IP address in string format d.d.d.d into u32 value   
+ */
+unsigned long IPaddress_str2num(char *IPaddress){
+
+    unsigned int ip[4];
+    int ret;
+
+    ret=sscanf(IPaddress, "%u.%u.%u.%u", &ip[3], &ip[2], &ip[1], &ip[0]);
+    if(ret == 4)
+        return (unsigned long)(ip[0]&0xff) | ((unsigned long)(ip[1]&0xff)<<8) | ((unsigned long)(ip[2]&0xff)<<16) | ((unsigned long)(ip[3]&0xff)<<24);
+    else {
+        if(verbose) printf("Wrong IP address format.\n");
+        return 0;
+    }
+
+}
+
+/*
+ * Convert IP address from a u32 value into string format d.d.d.d
+ * the string should be allocated by the caller
+ */
+void IPaddress_num2str(unsigned long IPaddress, char *IPaddress_str){
+
+
+    sprintf(IPaddress_str, "%d.%d.%d.%d", (unsigned char)(IPaddress>>24), (unsigned char)(IPaddress>>16), (unsigned char)(IPaddress>>8), (unsigned char)(IPaddress));
+
+}
+
+/*
+ * Convert string to upper case
+ */
+char *strupr(char *s){ 
+	unsigned c; 
+    unsigned char *p = (unsigned char *)s; 
+    while (c = *p) *p++ = toupper(c);
+
+	return s; 
+}
+
+
+/*
+ * Retreive local eth0 MAC address
+ */ 
+unsigned long long eth0MAC(void){
+	int fd;
+	char mac[18];
+	
+	fd = open("/sys/class/net/eth0/address", O_RDONLY);
+
+	read(fd, mac, 18);
+
+	close(fd);
+
+	return MACaddress_str2num(mac);
+}
+
+/*
+ * Retreive local eth1 MAC address
+ */
+unsigned long long eth1MAC(void){
+    int fd;
+    char mac[18];
+
+    fd = open("/sys/class/net/eth1/address", O_RDONLY);
+
+    read(fd, mac, 18);
+
+    close(fd);
+
+    return MACaddress_str2num(mac);
+}
+
+/*
+ * Retreive local WiFi MAC address
+ */
+unsigned long long wifiMAC(void){
+    int fd;
+    char mac[18];
+
+    fd = open("/sys/class/net/wlan0/address", O_RDONLY);
+
+    read(fd, mac, 18);
+
+    close(fd);
+
+    return MACaddress_str2num(mac);
+}
+
+/*
+ * Retreive network parameters from the configs 
+ * Value should have at least STR_MAX bytes alocated.
+ * returns 0 on success
+ */
+int getnet(const char *net, const char *param, char *value){
+
+    FILE *fp;
+	char str[80], *ret;	
+
+	sprintf(str, "uci get network.%s.%s", net, param);
+
+    fp=popen(str,"r");
+    ret=fgets(value, STR_MAX, fp);
+    pclose(fp);
+
+	if(ret==NULL) 
+		return -1;
+	else
+		return 0;
+}
+
+/*
+ * Update network parameters in the configs 
+ * returns 0 on success
+ */
+int setnet(const char *net, const char *param, const char *value){
+
+    FILE *fp;
+    char str[80];
+	char dummy[STR_MAX];
+
+    sprintf(str, "uci set network.%s.%s=%s 2>&1; uci commit network;", net, param, value);
+
+    fp=popen(str,"r");
+    fgets(dummy, STR_MAX, fp);
+    pclose(fp);
+
+    if(!strfind(dummy, "Invalid"))
+        return -1;
+    else
+        return 0;
 }
 
