@@ -33,9 +33,6 @@ endef
 define Package/dragino-yun-conf/install
 	$(INSTALL_DIR) $(1)/etc/avahi/services
 	$(INSTALL_DIR) $(1)/etc/arduino
-	$(INSTALL_DIR) $(1)/etc/arduino/ATmegaBoot
-	$(INSTALL_DIR) $(1)/etc/arduino/optiboot
-	$(INSTALL_DIR) $(1)/etc/arduino/stk500v2
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_DIR) $(1)/etc/triggerhappy/triggers.d
 
@@ -47,17 +44,12 @@ define Package/dragino-yun-conf/install
 	$(INSTALL_CONF) ./files/etc/config/firewall $(1)/etc/config/firewall.1
 	#$(INSTALL_CONF) ./files/etc/config/dhcp $(1)/etc/config/dhcp.1
 
-	$(INSTALL_DATA) ./files/etc/arduino/Caterina-Yun.hex $(1)/etc/arduino/
 	$(INSTALL_CONF) ./files/etc/arduino/linino-arduino-release $(1)/etc/arduino/
 	sed -i "s/DATE/`date`/g" $(1)/etc/arduino/linino-arduino-release
 	$(INSTALL_CONF) ./files/etc/arduino/gpg_gen_key_batch $(1)/etc/arduino/
 	$(INSTALL_DATA) ./files/etc/arduino/wifi_timezones.csv.gz $(1)/etc/arduino
 	$(INSTALL_DATA) ./files/etc/arduino/wifi_error_statuses.csv.gz $(1)/etc/arduino
 	$(INSTALL_DATA) ./files/etc/arduino/wifi_error_reasons.csv.gz $(1)/etc/arduino
-
-	$(INSTALL_DATA) ./files/etc/arduino/ATmegaBoot/*.* $(1)/etc/arduino/ATmegaBoot/
-	$(INSTALL_DATA) ./files/etc/arduino/optiboot/*.* $(1)/etc/arduino/optiboot/
-	$(INSTALL_DATA) ./files/etc/arduino/stk500v2/*.* $(1)/etc/arduino/stk500v2/
 
 	$(INSTALL_DATA) ./files/etc/LININO_CONTRIBUTORS.TXT $(1)/etc/
 endef

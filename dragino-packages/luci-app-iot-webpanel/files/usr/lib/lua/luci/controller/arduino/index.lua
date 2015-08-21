@@ -427,6 +427,9 @@ function config_post()
   if not_nil_or_empty(params["hostname"]) then
     local hostname = string.gsub(params["hostname"], " ", "_")
     set_first(uci, "system", "system", "hostname", hostname)
+	uci:set("network","wan1","hostname",hostname)
+	uci:set("network","wan","hostname",hostname)
+	uci:set("network","lan","hostname",hostname)
   end
 
   if params["timezone_desc"] then

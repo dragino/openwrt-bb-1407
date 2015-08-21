@@ -49,6 +49,8 @@ define Package/smstools3/install
 	$(INSTALL_BIN) ./files/scripts/* $(1)/usr/share/smstools3/scripts/
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/smstools3 $(1)/etc/init.d/ 
+	$(INSTALL_DATA) ./files/examples/smsd.conf.mw7880 $(1)/etc/smsd.conf
+	$(INSTALL_BIN) ./files/scripts/sendsms $(1)/usr/sbin/
 endef
 
 define Package/smstools3/preinst

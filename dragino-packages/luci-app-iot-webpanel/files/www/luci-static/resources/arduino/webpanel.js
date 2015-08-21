@@ -71,7 +71,7 @@ function formCheck(form) {
     errorHandler(hostname, errContainer, "Please choose a name for your Y&uacute;n");
     errors = true;
 
-  } else if (hostname.value.match(/[^a-zA-Z0-9]/)) {
+  } else if (hostname.value.match(/[^a-zA-Z0-9-_]/)) {
     errorHandler(hostname, errContainer, "You can only use alphabetical characters for the hostname (A-Z or a-z)");
     errors = true;
   }
