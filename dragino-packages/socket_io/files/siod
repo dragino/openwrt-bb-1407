@@ -1,6 +1,9 @@
 
 package 'siod'
 
+config siod
+	option id	'1001'
+
 config gpio '0'
 	option number '1' 
 	option direction 'out'

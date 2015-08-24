@@ -14,6 +14,7 @@
 #include <arpa/inet.h>
 
 #define SOCKET_IO_REV   "0.1"
+#define HW_VER "0.1"	
 
 #define TIMEOUT	100000L   	/* in us */
 #define SOCKET_BUFLEN 1500	/* One standard MTU unit size */ 
@@ -21,6 +22,7 @@
 #define SIOD_ID	"1000"		/* The ID of the SIOD. Must be unique 4 digit number */
 #define GPIO_MAX_NUMBER	10	/* We have that many GPIOs */
 #define STR_MAX		100		/* Maximum string length */
+#define MSG_MAX     500     /* Maximum UDP message length */
 #define UDP_ARGS_MAX 20		/* we can have that much arguments ('/' separated) in the UDP datagram */ 
 
 enum {OUT, IN };
@@ -48,7 +50,7 @@ struct GST_node {
 
 
 int strfind(const char *s1, const char *s2);
-int process_udp(int udpfd, char *datagram, struct sockaddr_in cliaddr, socklen_t addrlen);
+int process_udp(char *datagram);
 void RemoveSpaces(char* source);
 int read_config(void);
 int extract_args(char *datagram, char *args[], int *n_args);
@@ -58,8 +60,15 @@ void MACaddress_num2str(unsigned long long MACaddress, char *MACaddress_str);
 unsigned long IPaddress_str2num(char *IPaddress);
 void IPaddress_num2str(unsigned long IPaddress, char *IPaddress_str);
 unsigned long long eth0MAC(void);
-int getnet(const char *net, const char *param, char *value);
-int setnet(const char *net, const char *param, const char *value);
+unsigned long long eth1MAC(void);
+unsigned long long wifiMAC(void);
+int uciget(const char *param, char *value);
+int uciset(const char *param, const char *value);
+void ucicommit(void);
+void restartnet(void);
+void uptime(char *uptime);
+int getsoftwarever(char *ver);
+int broadcast(char *msg);
 
 enum {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
 	  RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, AsteriskStatRes, \
@@ -72,28 +81,26 @@ char *cmds[26]={"ConfigBatmanReq", "ConfigBatmanRes", "ConfigBatman", "ConfigReq
 
 int verbose=0; 	/* get value from the command line */
 
+
+/* listening socket */
+int udpfd;
+struct sockaddr_in servaddr, cliaddr;
+
+/* socket for the brodcasting messages*/
+int bcast_sockfd;
+struct sockaddr_in bcast_servaddr;
+
 int main(int argc, char **argv){
 
-	int udpfd, n, nready; 
+	int /*udpfd,*/ n, nready; 
 	char datagram[SOCKET_BUFLEN];
 	fd_set rset;
 	socklen_t addrlen;
-	struct sockaddr_in servaddr, cliaddr;
+	//struct sockaddr_in servaddr, cliaddr;
 	struct timeval	timeout;
-	int res;	
+	int res, enabled;	
 
 	/* Splash ============================================================ */
-
-	{
-		char value[STR_MAX];		
-	
-        if(setnet("lan", "proto", "penev"))
-			printf("error\n");
-		else 
-        	printf("proto=alabala\n");
-
-	}
-
 
 	/* Check for verbosity argument */
 	if(argc>1) {
@@ -118,8 +125,14 @@ int main(int argc, char **argv){
 	GST->gpios = gpios; // What I am wanted to do ???????????????????????????????????????
 
 
-	/* Broadcast PUT commands  =========================================== */
-	
+	/* Initialize the broadcasting socket  =============================== */
+    bcast_sockfd=socket(AF_INET,SOCK_DGRAM,0);
+    enabled = 1;
+    setsockopt(bcast_sockfd, SOL_SOCKET, SO_BROADCAST, &enabled, sizeof(enabled));
+    bzero(&bcast_servaddr,sizeof(servaddr));
+    bcast_servaddr.sin_family = AF_INET;
+    bcast_servaddr.sin_addr.s_addr=inet_addr("255.255.255.255");
+    bcast_servaddr.sin_port=htons(PORT);	
 
 	/* Start UDP Socket server and listening for commands ================ */
 	udpfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -127,6 +140,10 @@ int main(int argc, char **argv){
                 perror("socket() failed");
 		exit(-1);
 	}
+
+	//enable reception of broadcasting data
+	//enabled = 1;
+    //setsockopt(udpfd, SOL_SOCKET, SO_BROADCAST, &enabled, sizeof(enabled));
 
 	/* Prepare the address */
 	memset(&servaddr, 0, sizeof(servaddr)); 	
@@ -172,7 +189,7 @@ int main(int argc, char **argv){
 			} else if (n>0){
 				/* We have got an n byte datagram */
 				datagram[n] = '\0';
-				process_udp(udpfd, datagram, cliaddr, addrlen);
+				process_udp(datagram);
 
 				/* Send it back */
 				//sendto(udpfd, datagram, n, 0, &cliaddr, addrlen);		
@@ -274,60 +291,20 @@ int read_config(void){
 }
 
 
-/* process the data coming from the udp socket
- * data - the command coming from the socket.
- *	  Zero terminated string assumed 
- *
- *
- * supported formats are: (note that the spaces in the commands are optional)
- *
- *   Command to set local output 
- *
- *    SET AAAA X Y
- *
- *	  AAAA = ID of the SIOD
- *	  X    = number of an output [0, 1, .. 9]
- *	       if X is not an output the command is ignored 		
- *	  Y    = Active / not active [0, 1]
- *
- *   Comand to request the state of the local input
- *
- *
- *    GET AAAA X Y
- *
- *        AAAA = ID of the SIOD
- *        X    = number of input/output [0, 1, .. 9]
- *        Y    = Active / not active [0, 1]
- *
- *
- *   Command to update the global status table (GST) with the current IO states
- *
- *
- *    PUT AAAA X Y
- *
- *        AAAA = ID of the SIOD
- *        X    = number of input/output [0, 1, .. 9]
- *        Y    = Active / not active [0, 1]
- *
- * 
- *   Command to update the global status table (GST) with the IO type
- *
- *
- *    MOD AAAA X Y
- *
- *        AAAA = ID of the SIOD
- *        X    = number of input/output [0, 1, .. 9]
- *        Y    = IO type 0 - output, 1 - input 
- *	 	
+/* 
+ * process the data coming from the udp socket
  */
 
-int process_udp(int udpfd, char *datagram, struct sockaddr_in cliaddr, socklen_t addrlen){
+int process_udp(char *datagram){
 		
-	int len=strlen(datagram), n_args;
+	int n_args;
 	char *args[UDP_ARGS_MAX];  	
 
+	printf("In process_udp \n");
+
+
 	/* We process only datagrams starting with JNTCIT */
-	if ((len<7) || !strncmp(datagram, "JNTCIT/", 7)){
+	if ((strlen(datagram)<7) || strncmp(datagram, "JNTCIT/", 7)){
 		if(verbose) printf("unrelated datagram => %s\n", datagram);
 		return 0;
 	} else
@@ -335,20 +312,41 @@ int process_udp(int udpfd, char *datagram, struct sockaddr_in cliaddr, socklen_t
 
 	/* UDP pre processing */
 	RemoveSpaces(datagram);
-	datagram = strupr(datagram);
+	//datagram = strupr(datagram);
 	
 	/* extract arguments */
 	extract_args(datagram, args, &n_args);
 
+	//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+	{
+		int i;
+		//To be removed
+		for(i=0;i<n_args;i++){
+			printf("%s\n", args[i]);
+		}
+	}
+
 
 	switch (hashit(args[0])){
+		/*
+			ConfigBatmanReq
 
+		*/		
 		case ConfigBatmanReq:{
 
 
 
 			}
 			break;
+        /*
+       ConfigBatmanRes/MACAddress/SSID/Encryption/Passphrase/WANbridge
+			MACAddress:(WiFi)	0a:ba:ff:10:20:30 (WiFi MAC used as reference)
+			SSID:				jntcit
+			Encryption:			WPA2
+			Passphrase:			S10D
+			WANbridge:			True, False
+
+        */  
         case ConfigBatmanRes:{
 			/* We may fill our table about the available MACaddresses in the mesh */
 			char *MACaddress = args[1];
@@ -357,22 +355,98 @@ int process_udp(int udpfd, char *datagram, struct sockaddr_in cliaddr, socklen_t
 
             }
             break;
+		/*
+		ConfigBatman/MACAddress/SSID/Encryption/Passphrase/WANbridge
+			MACAddress:(WiFi)(optional)	0a:ba:ff:10:20:30
+			SSID:					jntcit
+			Encryption:				WPA2
+			Passphrase:				S10D
+			WANbridge:				True, False	
+		*/
         case ConfigBatman:{
 
             }
             break;
+		/*
+		ConfigReq
+
+		We send our network parameters, check ConfigRes
+		*/
         case ConfigReq:{
+				char msg[MSG_MAX];
+				char MACAddressWiFi[STR_MAX], MACAddressWAN[STR_MAX], Uptime[STR_MAX], SoftwareVersion[STR_MAX], AAAA[STR_MAX];
+				char IPAddressWiFi[STR_MAX], IPMaskWiFi[STR_MAX], IPAddressWAN[STR_MAX], IPMaskWAN[STR_MAX], Gateway[STR_MAX], DNS1[STR_MAX], DNS2[STR_MAX], DHCP[STR_MAX];
+
+				if(verbose) printf("Rcv: ConfigReq\n");
+
+				IPaddress_num2str(wifiMAC(), MACAddressWiFi);
+				IPaddress_num2str(eth1MAC(), MACAddressWAN);
+            	uptime(Uptime);
+            	getsoftwarever(SoftwareVersion);
+    			uciget("siod.siod_id.id", AAAA);        
+				uciget("network.mesh_0.ipaddr", IPAddressWiFi);
+            	uciget("network.mesh_0.ipaddr", IPMaskWiFi);
+            	uciget("network.wan.ipaddr", IPAddressWAN);
+            	uciget("network.wan.netmask", IPMaskWAN);
+            	uciget("network.mesh_0.gateway", Gateway);
+            	uciget("network.mesh_0.dns", DNS1);
+				uciget("network.mesh_0.proto", DHCP);
+				
+				sprintf(msg, "JNTCIT/ConfigRes/%s/%s/%s/SIOD/HW_VER/%s/%s/%s/%s/%s/%s/%s//%s", MACAddressWiFi, MACAddressWAN, Uptime, SoftwareVersion, AAAA, \
+						IPAddressWiFi, IPMaskWiFi, IPAddressWAN, IPMaskWAN, Gateway, DNS1, DNS2, DHCP);
+
+				printf("Sent: %s\n", msg);
+
+				broadcast(msg);
 
             }
             break;
+		/*
+		ConfigRes/MACAddressWiFi/MACAddressWAN/UpTime/UnitType/HardwareVersion/SoftwareVersion/AAAA/IPAddressWiFi/IPMaskWiFi/IPAddressWAN/IPMaskWAN/Gateway/DNS1/DNS2/DHCP
+			MACAddressWiFi:				0a:ba:ff:10:20:30
+			MACAddressWAN:				0a:cc:10:bb:ab:00
+			Uptime: (Linux in seconds)	123.43		
+			UnitType: 					SIOD, AsteriskPC, Intercom
+			HardwareVersion: 			0.1
+			SoftwareVersion: 			0.5(it is convenient to get this from /etc/banner)
+			AAAA: (optional)			SIOD ID Only if the UnitType is SIOD
+			IPAddressWiFi:(optional)	10.10.0.55
+			IPMaskWiFi:(optional)		255.255.255.0
+			IPAddressWAN:(optional)		20.20.0.10
+			IPMaskWAN:(optional)		255.255.255.0
+			Gateway:(optional)			10.10.0.1
+			DNS1:(optional)				8.8.8.8
+			DNS2:(optional)				4.4.4.4
+			DHCP:(optional)				True, False
+
+		Does noting at the moment
+		*/
         case ConfigRes:{
 
             }
             break;
+		/*
+		Config/MACAddress/IPAddress/IPMask/Gateway/DNS1/DNS2/DHCP
+			MACAddress:			0a:ba:ff:10:20:30
+			IPAddress:			10.10.0.55
+			IPMask:				255.255.255.0
+			Gateway:(optional)	10.10.0.1
+			DNS1:(optional)		8.8.8.8
+			DNS2:(optional)		4.4.4.4
+			DHCP:				True, False
+
+		We set our network parameters
+		*/
         case Config:{
 
             }
             break;
+		/*
+		RestartNetworkService/MACAddress
+			MACAddress:(optional)	0a:ba:ff:10:20:30
+
+		We restart network services
+		*/
         case RestartNetworkService:{
 
             }
@@ -716,20 +790,24 @@ unsigned long long wifiMAC(void){
 }
 
 /*
- * Retreive network parameters from the configs 
+ * Execute uci get command to retreive a value from the openwrt configuration files 
  * Value should have at least STR_MAX bytes alocated.
  * returns 0 on success
  */
-int getnet(const char *net, const char *param, char *value){
+int uciget(const char *param, char *value){
 
     FILE *fp;
-	char str[80], *ret;	
+	char *ret, str[100];
+	int i, len;	
 
-	sprintf(str, "uci get network.%s.%s", net, param);
+	sprintf(str, "uci get %s", param);
 
     fp=popen(str,"r");
     ret=fgets(value, STR_MAX, fp);
     pclose(fp);
+
+	len=strlen(value);
+	if(value[len-1]=='\r' || value[len-1]=='\n') value[len-1]='\0';
 
 	if(ret==NULL) 
 		return -1;
@@ -738,16 +816,17 @@ int getnet(const char *net, const char *param, char *value){
 }
 
 /*
- * Update network parameters in the configs 
+ * Execute uci set command to update value to the openwrt configuration files
+ * Note that you have to commit the change afterwords
  * returns 0 on success
  */
-int setnet(const char *net, const char *param, const char *value){
+int uciset(const char *param, const char *value){
 
     FILE *fp;
-    char str[80];
+    char str[100];
 	char dummy[STR_MAX];
 
-    sprintf(str, "uci set network.%s.%s=%s 2>&1; uci commit network;", net, param, value);
+    sprintf(str, "uci set %s=%s 2>&1", param, value);
 
     fp=popen(str,"r");
     fgets(dummy, STR_MAX, fp);
@@ -759,3 +838,85 @@ int setnet(const char *net, const char *param, const char *value){
         return 0;
 }
 
+/*
+ * Commit all changes (in the config files) done by uci set commands
+ */
+void ucicommit(void){
+
+    FILE *fp;
+
+    fp=popen("uci commit","r");
+    pclose(fp);
+}
+
+
+/*
+ * Restart network services
+ */
+void restartnet(void){
+
+    FILE *fp;
+
+	char dummy[STR_MAX];
+
+    fp=popen("/etc/init.d/network reload 2>&1","r");
+
+	while(fgets(dummy, STR_MAX, fp) != NULL){
+		printf("%s\n", dummy);
+
+	}
+
+    if(pclose(fp)==-1)
+		printf("Issue reloading network services");
+
+}
+
+
+
+/*
+ * Get the uptime in seconds.
+ * Value should have at least STR_MAX bytes alocated.
+ *
+ */
+void uptime(char *uptime){
+
+    FILE *fp;
+	int len;
+
+    fp=popen("cut -d ' ' -f 1 </proc/uptime","r");
+
+    fgets(uptime, STR_MAX, fp);
+
+	len=strlen(uptime);
+    if(uptime[len-1]=='\r' || uptime[len-1]=='\n') uptime[len-1]='\0';
+
+}
+
+/*
+ * Get the software version.
+ * ver should have at least STR_MAX bytes alocated.
+ */
+int getsoftwarever(char *ver){
+
+    FILE *fp;
+	char *ret;	
+	int len;
+
+    fp=popen("cat /etc/banner | grep 'Version: .*'| cut -f3- -d' '","r");
+    ret=fgets(ver, STR_MAX, fp);
+    pclose(fp);
+
+	len=strlen(ver);
+    if(ver[len-1]=='\r' || ver[len-1]=='\n') ver[len-1]='\0';
+
+    if(ret==NULL)
+        return -1;
+    else
+        return 0;
+}
+
+int broadcast(char *msg){
+	
+	return(sendto(bcast_sockfd,msg,strlen(msg),0, (struct sockaddr *)&bcast_servaddr,sizeof(bcast_servaddr)));
+
+}
