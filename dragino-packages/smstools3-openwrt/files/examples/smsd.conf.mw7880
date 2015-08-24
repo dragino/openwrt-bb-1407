@@ -10,6 +10,7 @@ checked = /var/smstools3/sms/checked
 incoming = /var/smstools3/sms/incoming
 #report = /var/smstools3/sms/report
 sent = /var/smstools3/sms/sent
+eventhandler = /usr/share/smstools3/scripts/ForwardtoMediaServer
 alarmlevel = 4
 delaytime = 10
 

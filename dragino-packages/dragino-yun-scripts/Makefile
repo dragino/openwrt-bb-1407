@@ -27,21 +27,13 @@ define Package/dragino-yun-scripts/install
 	$(INSTALL_DIR) $(1)/usr/bin/
 	$(INSTALL_DIR) $(1)/etc/init.d
 
-	$(INSTALL_BIN) ./files/usr/bin/blink-start $(1)/usr/bin/
-	$(INSTALL_BIN) ./files/usr/bin/blink-stop $(1)/usr/bin/
-	$(INSTALL_BIN) ./files/usr/bin/detect-avr $(1)/usr/bin/	
 	$(INSTALL_BIN) ./files/usr/bin/update-file-available $(1)/usr/bin/
 	$(INSTALL_BIN) ./files/usr/bin/run-sysupgrade $(1)/usr/bin/
 	$(INSTALL_BIN) ./files/usr/bin/wifi-live-or-reset $(1)/usr/bin/
 	$(INSTALL_BIN) ./files/usr/bin/wifi-reset-and-reboot $(1)/usr/bin/
 	$(INSTALL_BIN) ./files/usr/bin/reset-to-factory-anyway $(1)/usr/bin/
-	$(INSTALL_BIN) ./files/usr/bin/run-avrdude $(1)/usr/bin/
-	$(INSTALL_BIN) ./files/usr/bin/merge-sketch-with-bootloader.lua $(1)/usr/bin/
 	$(INSTALL_BIN) ./files/usr/bin/wifi-reset-button-pressed $(1)/usr/bin/
 	$(INSTALL_BIN) ./files/usr/bin/wifi-reset-button-released $(1)/usr/bin/
-	$(INSTALL_BIN) ./files/usr/bin/kill-bridge $(1)/usr/bin/
-	$(INSTALL_BIN) ./files/usr/bin/run-bridge $(1)/usr/bin/
-	$(INSTALL_BIN) ./files/usr/bin/reset-mcu $(1)/usr/bin/
 	$(INSTALL_BIN) ./files/usr/bin/special-storage-available $(1)/usr/bin/
 	$(INSTALL_BIN) ./files/usr/bin/pretty-wifi-info.lua $(1)/usr/bin
 

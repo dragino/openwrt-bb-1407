@@ -23,7 +23,7 @@ end
 
 local function config_get()
   local uci = luci.model.uci.cursor()
-  uci:load("arduino")
+  uci:load("sensor")
 
   local board_type = {}
   board_type[1] = { code = "leonardo", label = "Leonardo, M32, M32W" }
@@ -34,30 +34,30 @@ local function config_get()
   board_type[6] = { code = "undefined", label = "Undefined" }
 
   local ctx = {
-	board = uci:get("arduino","mcu","board"),
+	board = uci:get("sensor","mcu","board"),
 	board_type = board_type,
-	avr_part = uci:get("arduino","mcu","avr_part"),
-	upload_bootloader = uci:get("arduino","mcu","upload_bootloader"),
+	avr_part = uci:get("sensor","mcu","avr_part"),
+	upload_bootloader = uci:get("sensor","mcu","upload_bootloader"),
   }
   luci.template.render("dragino/sensor", ctx)
 end
 
 local function config_post()
   local uci = luci.model.uci.cursor()
-  uci:load("arduino")
+  uci:load("sensor")
 
   if luci.http.formvalue("board") then
-    uci:set("arduino", "mcu", "board", luci.http.formvalue("board"))
+    uci:set("sensor", "mcu", "board", luci.http.formvalue("board"))
   end
 
   local upload_bootloader = luci.http.formvalue("upload_bootloader")
   if upload_bootloader == "enable" then
-    uci:set("arduino", "mcu", "upload_bootloader", "enable")
+    uci:set("sensor", "mcu", "upload_bootloader", "enable")
   else 
-    uci:set("arduino", "mcu", "upload_bootloader", "disable")
+    uci:set("sensor", "mcu", "upload_bootloader", "disable")
   end 
 
-  uci:commit("arduino")
+  uci:commit("sensor")
   luci.util.exec("/usr/bin/reset-mcu")
   config_get()
 end

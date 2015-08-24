@@ -54,19 +54,25 @@ do
 			HAS_INTERNET=`fping -e $HOST2 | grep alive`
 		fi
 	fi
-
+	
+	#echo "result $HAS_INTERNET"
+	#echo $USB_MODEL
+	
+	
 	if [ ! -z "$HAS_INTERNET" ]; then
+		#echo "Has Internet Connection"	
 		echo 1 > /sys/devices/platform/leds-gpio/leds/dragino2:red:system/brightness
 		#if [ $FIRST_UPLOAP_DONED -eq 0 ];then
 			#lua /usr/bin/update_status_foxconn
 			#FIRST_UPLOAP_DONED=1
 		#fi
-	
+
 		if [ ! -z `grep 'address=/#/' /etc/dnsmasq.conf` ];then
 			sed '/address=\/#\//d' /etc/dnsmasq.conf -i
 			/etc/init.d/dnsmasq restart
 		fi
 	else
+		#echo "No Internet Connection"
 		echo 0 > /sys/devices/platform/leds-gpio/leds/dragino2:red:system/brightness
 		if [ -z `grep 'address=/#/' /etc/dnsmasq.conf` ];then
 			echo address=/#/$LOCAL_IP >> /etc/dnsmasq.conf
@@ -87,6 +93,16 @@ do
 			fi
 		fi
 	fi
+	
+	# Check if the SMSD is running for UW980
+	if [ $USB_MODEL == "UW980" ]; then
+		smsd_thread_line=`ps | grep "smsd" | grep -v grep | grep /usr/sbin/smsd -c`
+		if [ $smsd_thread_line -ne 2 ];then
+			/etc/init.d/smstools3 stop
+			/etc/init.d/smstools3 start
+		fi
+	fi 
+	
 
 #Detect if the 3G connection is a fake 
 

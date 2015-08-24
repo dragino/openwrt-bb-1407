@@ -4,10 +4,10 @@
 SFLAG=
 AFLAG=
 
-APP=SIOD
+APP=yun
 
 REPO_PATH=$(pwd)
-VERSION=3.0.1
+VERSION=3.0.2
 OPENWRT_PATH="barrier_breaker"
 
 while getopts 'a:p:v:sh' OPTION
