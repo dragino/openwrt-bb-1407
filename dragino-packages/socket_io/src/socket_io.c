@@ -317,16 +317,6 @@ int process_udp(char *datagram){
 	/* extract arguments */
 	extract_args(datagram, args, &n_args);
 
-	//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
-	{
-		int i;
-		//To be removed
-		for(i=0;i<n_args;i++){
-			printf("%s\n", args[i]);
-		}
-	}
-
-
 	switch (hashit(args[0])){
 		/*
 			ConfigBatmanReq
@@ -334,7 +324,7 @@ int process_udp(char *datagram){
 		*/		
 		case ConfigBatmanReq:{
 
-
+				if(verbose) printf("Rcv: ConfigBatmanReq\n");
 
 			}
 			break;
@@ -350,7 +340,8 @@ int process_udp(char *datagram){
         case ConfigBatmanRes:{
 			/* We may fill our table about the available MACaddresses in the mesh */
 			char *MACaddress = args[1];
-						
+			
+			if(verbose) printf("Rcv: ConfigBatmanRes\n");
 
 
             }
@@ -364,6 +355,8 @@ int process_udp(char *datagram){
 			WANbridge:				True, False	
 		*/
         case ConfigBatman:{
+
+				if(verbose) printf("Rcv: ConfigBatman\n");
 
             }
             break;
@@ -423,6 +416,8 @@ int process_udp(char *datagram){
 		*/
         case ConfigRes:{
 
+				if(verbose) printf("Rcv: ConfigRes\n");
+
             }
             break;
 		/*
@@ -439,6 +434,8 @@ int process_udp(char *datagram){
 		*/
         case Config:{
 
+				if(verbose) printf("Rcv: Config\n");
+
             }
             break;
 		/*
@@ -449,53 +446,80 @@ int process_udp(char *datagram){
 		*/
         case RestartNetworkService:{
 
+				if(verbose) printf("Rcv: RestartNetworkService\n");
+
+
             }
             break;
         case RestartAsterisk:{
+
+				if(verbose) printf("Rcv: RestartAsterisk\n");
 
             }
             break;
         case ConfigAsterisk:{
 
+				if(verbose) printf("Rcv: ConfigAsterisk\n");
+
             }
             break;
         case AsteriskStatReq:{
 
+				if(verbose) printf("Rcv: AsteriskStatReq\n");
+
             }
             break;
         case AsteriskStatRes:{
+			
+				if(verbose) printf("Rcv: AsteriskStatRes\n");
 
             }
             break;
         case ConfigNTP:{
 
+                if(verbose) printf("Rcv: ConfigNTP\n");
+
             }
             break;
         case Set:{
+
+                if(verbose) printf("Rcv: Set\n");
 
             }
             break;
         case SetIf:{
 
+                if(verbose) printf("Rcv: SetIf\n");
+
             }
             break;
         case TimeRange:{
+
+                if(verbose) printf("Rcv: TimeRange\n");
 
             }
             break;
         case TimeRangeOut:{
 
+                if(verbose) printf("Rcv: TimeRangeOut\n");
+
             }
             break;        
 		case Get:{
+
+                if(verbose) printf("Rcv: Get\n");
 
             }
             break;        
 		case Put:{
 
+                if(verbose) printf("Rcv: Put\n");
+
             }
             break;        
 		case Req:{
+
+                if(verbose) printf("Rcv: Req\n");
 
             
             }
@@ -503,30 +527,44 @@ int process_udp(char *datagram){
 		case Mod:{
 
 
+                if(verbose) printf("Rcv: Mod\n");
+
             }
             break;        
 		case GSTCheckSumReq:{
 
 
+                if(verbose) printf("Rcv: GSTCheckSumReq\n");
+
             }
            	break;        
 		case GSTCheckSum:{
+
+                if(verbose) printf("Rcv: GSTCheckSum\n");
 
             }
             break;        
 		case GSTReq:{
 
+                if(verbose) printf("Rcv: GSTReq\n");
+
             }
             break;
         case GSTdata:{
+
+                if(verbose) printf("Rcv: GSTdata\n");
 
             }
             break;
         case Ping:{
 
+                if(verbose) printf("Rcv: Ping\n");
+
 			}
             break;
         case PingRes:{
+
+                if(verbose) printf("Rcv: PingRes\n");
 
 			}
             break;
