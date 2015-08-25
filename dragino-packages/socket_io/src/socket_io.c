@@ -64,6 +64,8 @@ unsigned long long eth1MAC(void);
 unsigned long long wifiMAC(void);
 int uciget(const char *param, char *value);
 int uciset(const char *param, const char *value);
+int ucidelete(const char *param);
+int uciadd_list(const char *param, const char *value);
 void ucicommit(void);
 void restartnet(void);
 void uptime(char *uptime);
@@ -188,6 +190,10 @@ int main(int argc, char **argv){
 				exit(-1);
 			} else if (n>0){
 				/* We have got an n byte datagram */
+			
+				/* reject the our own  broadcast messages */
+				//TBD
+
 				datagram[n] = '\0';
 				process_udp(datagram);
 
@@ -300,7 +306,7 @@ int process_udp(char *datagram){
 	int n_args;
 	char *args[UDP_ARGS_MAX];  	
 
-	printf("In process_udp \n");
+	if(verbose) printf("In process_udp() \n");
 
 
 	/* We process only datagrams starting with JNTCIT */
@@ -316,6 +322,15 @@ int process_udp(char *datagram){
 	
 	/* extract arguments */
 	extract_args(datagram, args, &n_args);
+
+	{//Will be delete !!!!!!!!!!!!!!!!!!!!!!!!!!!!!	
+	
+		int i;
+		for(i=0;i<n_args;i++) 
+			printf("%s\n", args[i]);
+
+	}
+
 
 	switch (hashit(args[0])){
 		/*
@@ -372,20 +387,21 @@ int process_udp(char *datagram){
 
 				if(verbose) printf("Rcv: ConfigReq\n");
 
-				IPaddress_num2str(wifiMAC(), MACAddressWiFi);
-				IPaddress_num2str(eth1MAC(), MACAddressWAN);
+				MACaddress_num2str(wifiMAC(), MACAddressWiFi);
+				MACaddress_num2str(eth1MAC(), MACAddressWAN);
             	uptime(Uptime);
             	getsoftwarever(SoftwareVersion);
     			uciget("siod.siod_id.id", AAAA);        
 				uciget("network.mesh_0.ipaddr", IPAddressWiFi);
-            	uciget("network.mesh_0.ipaddr", IPMaskWiFi);
+            	uciget("network.mesh_0.netmask", IPMaskWiFi);
             	uciget("network.wan.ipaddr", IPAddressWAN);
             	uciget("network.wan.netmask", IPMaskWAN);
             	uciget("network.mesh_0.gateway", Gateway);
             	uciget("network.mesh_0.dns", DNS1);
+				DNS2[0]='\0'; //Don't support for now
 				uciget("network.mesh_0.proto", DHCP);
 				
-				sprintf(msg, "JNTCIT/ConfigRes/%s/%s/%s/SIOD/HW_VER/%s/%s/%s/%s/%s/%s/%s//%s", MACAddressWiFi, MACAddressWAN, Uptime, SoftwareVersion, AAAA, \
+				sprintf(msg, "JNTCIT/ConfigRes/%s/%s/%s/SIOD/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s", MACAddressWiFi, MACAddressWAN, Uptime, HW_VER, SoftwareVersion, AAAA, \
 						IPAddressWiFi, IPMaskWiFi, IPAddressWAN, IPMaskWAN, Gateway, DNS1, DNS2, DHCP);
 
 				printf("Sent: %s\n", msg);
@@ -410,7 +426,7 @@ int process_udp(char *datagram){
 			Gateway:(optional)			10.10.0.1
 			DNS1:(optional)				8.8.8.8
 			DNS2:(optional)				4.4.4.4
-			DHCP:(optional)				True, False
+			DHCP:(optional)				Static, dhcp
 
 		Does noting at the moment
 		*/
@@ -428,13 +444,50 @@ int process_udp(char *datagram){
 			Gateway:(optional)	10.10.0.1
 			DNS1:(optional)		8.8.8.8
 			DNS2:(optional)		4.4.4.4
-			DHCP:				True, False
+			DHCP:				Static, dhcp
 
 		We set our network parameters
 		*/
         case Config:{
 
-				if(verbose) printf("Rcv: Config\n");
+				char *MACAddress, *IPAddress, *IPMask, *Gateway, *DNS1, *DNS2, *DHCP;
+				char MACAddressWAN[STR_MAX],  MACAddressWiFi[STR_MAX];
+				unsigned long long MACAddress_num;
+
+				if(n_args != 8) {
+					printf("Wrong format of Config message\n");
+					return -1;
+				}
+				MACAddress=args[1]; IPAddress=args[2]; IPMask=args[3]; Gateway=args[4]; DNS1=args[5]; DNS2=args[6]; DHCP=args[7];
+
+				MACAddress_num = MACaddress_str2num(MACAddress);
+				if(eth1MAC() == MACAddress_num){ /* We set WAN parameters*/
+
+					uciset("network.wan.ipaddr", IPAddress);
+					uciset("network.wan.netmask", IPMask);
+					uciset("network.wan.gateway", Gateway);
+					uciset("network.wan.dns", DNS1);
+					//uciset("network.wan.dns", DNS2); ignore for now
+					uciset("network.wan.proto", DHCP);
+
+					ucicommit();
+
+					if(verbose) printf("WAN Config commited\n");
+
+				} else if(wifiMAC() == MACAddress_num){ /* We set WiFi parameters*/
+
+                    uciset("network.mesh_0.ipaddr", IPAddress);
+                    uciset("network.mesh_0.netmask", IPMask);
+                    uciset("network.mesh_0.gateway", Gateway);
+                    uciset("network.mesh_o.dns", DNS1);
+                    //uciset("network.mesh_0.dns", DNS2); ignore for now
+                    uciset("network.mesh_0.proto", DHCP);
+
+					ucicommit();
+			
+					if(verbose) printf("WiFi Config commited\n");
+
+				}
 
             }
             break;
@@ -445,9 +498,26 @@ int process_udp(char *datagram){
 		We restart network services
 		*/
         case RestartNetworkService:{
+				char *MACAddress;
+				unsigned long long MACAddress_num;
+
+				MACAddress=args[1];				
 
 				if(verbose) printf("Rcv: RestartNetworkService\n");
+				
+				if (*MACAddress == '\0'){	
+					restartnet(); /* The optional MAC address is omitted so we restart our network service */
+					
+					if(verbose) printf("Restart the network service\n");
+					break;
+				}
 
+				MACAddress_num = MACaddress_str2num(MACAddress);
+				if(eth1MAC() == MACAddress_num || wifiMAC() == MACAddress_num) {
+					restartnet();
+
+					if(verbose) printf("Restart the network service\n");
+				}				
 
             }
             break;
@@ -476,8 +546,26 @@ int process_udp(char *datagram){
             }
             break;
         case ConfigNTP:{
+				char *NTPServer0, *NTPServer1, *NTPServer2, *NTPServer3, *enable_disable, *SyncTime;
 
-                if(verbose) printf("Rcv: ConfigNTP\n");
+                if(n_args != 7) {
+                    printf("Wrong format of ConfigNTP message\n");
+                    return -1;
+                }				
+				NTPServer0=args[1]; NTPServer1=args[2]; NTPServer2=args[3]; NTPServer3=args[4]; enable_disable=args[5]; SyncTime=args[6];
+
+				ucidelete("system.ntp.server");
+				ucicommit();
+
+				uciadd_list("system.ntp.server", NTPServer0);
+                if (*NTPServer1) uciadd_list("system.ntp.server", NTPServer1);                
+				if (*NTPServer2) uciadd_list("system.ntp.server", NTPServer2);                
+				if (*NTPServer3) uciadd_list("system.ntp.server", NTPServer3);
+				uciset("system.ntp.enable_server", enable_disable);
+				//SyncTime - ignore for now
+				ucicommit();
+
+				if(verbose) printf("NTP configurations updated\n");				
 
             }
             break;
@@ -682,17 +770,19 @@ int strfind(const char *s1, const char *s2){
  */
 int extract_args(char *datagram, char *args[], int *n_args){
 
-	int i;
+	int i, len;
+	
 	*n_args=1;
 	args[*n_args-1]=datagram;
-	for(i=0;i<strlen(datagram); i++){
+	len=strlen(datagram);	
+	for(i=0;i<len; i++){
 		if(datagram[i] == '/'){
 			args[(*n_args)++]=&datagram[i+1];
 			datagram[i]='\0';
 		}
-	}	
-
-
+	}
+	
+	return 0;	
 }
 
 /*
@@ -838,6 +928,8 @@ int uciget(const char *param, char *value){
 	char *ret, str[100];
 	int i, len;	
 
+
+
 	sprintf(str, "uci get %s", param);
 
     fp=popen(str,"r");
@@ -847,9 +939,10 @@ int uciget(const char *param, char *value){
 	len=strlen(value);
 	if(value[len-1]=='\r' || value[len-1]=='\n') value[len-1]='\0';
 
-	if(ret==NULL) 
+	if(ret==NULL){
+		value[0]='\0';
 		return -1;
-	else
+	}else
 		return 0;
 }
 
@@ -875,6 +968,56 @@ int uciset(const char *param, const char *value){
     else
         return 0;
 }
+
+
+/*
+ * Execute uci delete command in order to delete an option 
+ * or all list items from  the openwrt configuration files
+ * Note that you have to commit the change afterwords
+ * returns 0 on success
+ */
+int ucidelete(const char *param){
+
+    FILE *fp;
+    char str[100];
+    char dummy[STR_MAX];
+
+    sprintf(str, "uci delete %s 2>&1", param);
+
+    fp=popen(str,"r");
+    fgets(dummy, STR_MAX, fp);
+    pclose(fp);
+
+    if(!strfind(dummy, "Invalid"))
+        return -1;
+    else
+        return 0;
+}
+
+
+/*
+ * Execute uci add_list command in order to add new item to the list 
+ * Note that you have to commit the change afterwords
+ * returns 0 on success
+ */
+int uciadd_list(const char *param, const char *value){
+
+    FILE *fp;
+    char str[100];
+    char dummy[STR_MAX];
+
+    sprintf(str, "uci add_list %s=%s 2>&1", param, value);
+
+    fp=popen(str,"r");
+    fgets(dummy, STR_MAX, fp);
+    pclose(fp);
+
+    if(!strfind(dummy, "Invalid"))
+        return -1;
+    else
+        return 0;
+}
+
 
 /*
  * Commit all changes (in the config files) done by uci set commands
