@@ -19,36 +19,15 @@
 #define TIMEOUT	100000L   	/* in us */
 #define SOCKET_BUFLEN 1500	/* One standard MTU unit size */ 
 #define PORT 9930
-#define GPIO_MAX_NUMBER	10	/* We have that many GPIOs */
+#define OUTPUTS_NUM	4		/* We have that many gpio outputs */
+#define INPUTS_NUM 	4       /* We have that many gpio inputs */
 #define STR_MAX		100		/* Maximum string length */
 #define MSG_MAX     500     /* Maximum UDP message length */
 #define UDP_ARGS_MAX 20		/* we can have that much arguments ('/' separated) on the UDP datagram */ 
 
 char SIOD_ID[STR_MAX];		/* Our SIOD ID */
 
-enum {OUT, IN };
-struct gpio {
-	int number;		/* Number of the GPIO of the AR9331 SoC */
-	int index;		/* This is how the IO are refered in the wireless mesh */
-	int direction;	/* can be 0 for output or 1 for input */
-	int value;		/* current value, can be 0 or 1. The state 
-				       of the inputs is known only at the moment of reading it */ 
-};
-
-struct gpios_tag {		
-	int gpios_count;	/* We have that many IOs in the current SIOD */
-	struct gpio gpios[GPIO_MAX_NUMBER];
-	} gpios;		/* Keeps the state of the local IOs */
-
-
-typedef struct GST_node GST_node;
-struct GST_node {
-	int siod_id;				/* ID of the SIOD */					
-	struct gpios_tag gpios;		/* gpios.gpio.number is populated only for the local IOs */
-	struct GST_node *next;  	/* points to the next element in the list */ 
-	struct GST_node *prev;		/* points to the previous element in the list */
-	} *GST;						/* Keeps the status of all IOs of all nodes including the local node */
-
+unsigned char GPIOS;		/* We keep the status of the 8 IOs in this byte */
 
 int strfind(const char *s1, const char *s2);
 int process_udp(char *datagram);
@@ -76,12 +55,12 @@ int unicast(char *msg);
 
 enum {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
 	  RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, AsteriskStatRes, \
-	  ConfigNTP, Set, SetIf, TimeRange, TimeRangeOut, Get, Put, Req, Mod, \
+	  ConfigNTP, Set, SetIf, TimeRange, TimeRangeOut, Get, Put, \
 	  GSTCheckSumReq, GSTCheckSum, GSTReq, GSTdata, Ping, PingRes};
 char *cmds[26]={"ConfigBatmanReq", "ConfigBatmanRes", "ConfigBatman", "ConfigReq", "ConfigRes", "Config", \
       "RestartNetworkService", "RestartAsterisk", "ConfigAsterisk", "AsteriskStatReq", "AsteriskStatRes", \
-      "ConfigNTP", "Set", "SetIf", "TimeRange", "TimeRangeOut", "Get", "Put", "Req", "Mod", \
-      "GSTCheckSumReq", "GSTCheckSum", "GSTReq", "GSTdata", "Ping", "PingRes"};
+      "ConfigNTP", "Set", "SetIf", "TimeRange", "TimeRangeOut", "Get", "Put", "GSTCheckSumReq", "GSTCheckSum", \
+	  "GSTReq", "GSTdata", "Ping", "PingRes"};
 
 int verbose=0; 	/* get value from the command line */
 
@@ -121,14 +100,12 @@ int main(int argc, char **argv){
 	/* read GPIO config ================================================== */
 	read_config();	
 
-	/* Update GST with the local IOs  ==================================== */
-	GST = malloc(sizeof(GST_node));
-	uciget("siod.siod_id.id", SIOD_ID);
-	GST->siod_id = atoi(SIOD_ID);
-	GST->next=NULL;  
-	GST->prev=NULL;
-	GST->gpios = gpios; // What I am wanted to do ???????????????????????????????????????
-
+	/* Read the local input state ======================================== */
+	// TBD
+	
+	/* Retreave the local output state from the mesh GST 
+       if no data available read the current relays state ================ */
+	//TBD
 
 	/* Initialize the broadcasting socket  =============================== */
     bcast_sockfd=socket(AF_INET,SOCK_DGRAM,0);
@@ -217,93 +194,9 @@ int main(int argc, char **argv){
 
 }
 
-/*
- * Read config file and populate the gpios 
- */
-int read_config(void){
-
-	struct  uci_ptr ptr;
-	struct  uci_context *c;
-	struct uci_element *e1, *e2;
-	const char *cur_section_ref = NULL;
-	char str[STR_MAX];
-	int fd, n, number;
-
-	if(!(c = uci_alloc_context())){ 
-		printf("Can not allocate the uci_context\n");
-		return -1;
-	}
-
-	if ((uci_lookup_ptr(c, &ptr, "siod", true) != UCI_OK)) { 
-		printf("uci_lookup_ptr failed\n");
-		uci_free_context(c);
-		return -1;
-	}
-
-	if (!(ptr.flags & UCI_LOOKUP_COMPLETE)) {
-		c->err = UCI_ERR_NOTFOUND;
-		printf("uci redaing didn't complete\n");
-		return -1;
-	}
-
-	uci_foreach_element( &ptr.p->sections, e1) {
-		struct uci_section *s = uci_to_section(e1);
-		gpios.gpios[atoi(e1->name)].index = atoi(e1->name);
-		uci_foreach_element(&s->options, e2) {
-			struct uci_option *o = uci_to_option(e2);
-				
-			if (!strcmp(e2->name, "number")){
-				fd = open("/sys/class/gpio/export", O_WRONLY);
-				n = snprintf(str, STR_MAX, "%s", o->v.string);
-				write(fd, str, n);
-				close(fd);
-				number=atoi(o->v.string);
-
-				gpios.gpios[atoi(e1->name)].number=number;
-				gpios.gpios_count = atoi(e1->name) + 1;
-
-			} else if (!strcmp(e2->name, "direction")){
-				n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", number);
-				fd = open(str, O_WRONLY);
-				n = snprintf(str, STR_MAX, "%s", o->v.string);
-				write(fd, str, n);
-				close(fd);
-				if (!strcmp(o->v.string, "out")) 
-					gpios.gpios[atoi(e1->name)].direction=0;
-				else
-					gpios.gpios[atoi(e1->name)].direction=1;
-				
-			} else if (!strcmp(e2->name, "initialize")){
-				n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", number);
-				fd = open(str, O_WRONLY);
-				n = snprintf(str, STR_MAX, "%s", o->v.string);
-				write(fd, str, n);
-				close(fd);
-				if (!strcmp(o->v.string, "1"))    
-                                        gpios.gpios[atoi(e1->name)].value=1;
-                                else
-                                        gpios.gpios[atoi(e1->name)].value=0;
-			}
-		}
-	}
-	
-	if(verbose ==2) printf("GPIOs are configured as per the configuration file\n");	
-
-	for(n=0;n<gpios.gpios_count; n++){
-		printf("gpios[%d].number=%d\n", n, gpios.gpios[n].number);
-		printf("gpios[%d].direction=%d\n", n, gpios.gpios[n].direction);
-		printf("gpios[%d].value=%d\n", n, gpios.gpios[n].value);
-	}
-		
-
-	return 0;
-}
-
-
 /* 
  * process the data coming from the udp socket
  */
-
 int process_udp(char *datagram){
 		
 	int n_args;
@@ -632,20 +525,6 @@ int process_udp(char *datagram){
 		case Put:{
 
                 if(verbose) printf("Rcv: Put\n");
-
-            }
-            break;        
-		case Req:{
-
-                if(verbose) printf("Rcv: Req\n");
-
-            
-            }
-            break;        
-		case Mod:{
-
-
-                if(verbose) printf("Rcv: Mod\n");
 
             }
             break;        
