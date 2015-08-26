@@ -19,11 +19,12 @@
 #define TIMEOUT	100000L   	/* in us */
 #define SOCKET_BUFLEN 1500	/* One standard MTU unit size */ 
 #define PORT 9930
-#define SIOD_ID	"1000"		/* The ID of the SIOD. Must be unique 4 digit number */
 #define GPIO_MAX_NUMBER	10	/* We have that many GPIOs */
 #define STR_MAX		100		/* Maximum string length */
 #define MSG_MAX     500     /* Maximum UDP message length */
-#define UDP_ARGS_MAX 20		/* we can have that much arguments ('/' separated) in the UDP datagram */ 
+#define UDP_ARGS_MAX 20		/* we can have that much arguments ('/' separated) on the UDP datagram */ 
+
+char SIOD_ID[STR_MAX];		/* Our SIOD ID */
 
 enum {OUT, IN };
 struct gpio {
@@ -42,11 +43,11 @@ struct gpios_tag {
 
 typedef struct GST_node GST_node;
 struct GST_node {
-	int siod_id;		/* ID of the SIOD */					
+	int siod_id;				/* ID of the SIOD */					
 	struct gpios_tag gpios;		/* gpios.gpio.number is populated only for the local IOs */
-	struct GST_node *next;  /* points to the next element in the list */ 
-	struct GST_node *prev;	/* points to the previous element in the list */
-	} *GST;			/* Keeps the status of all IOs of all nodes including the local node */
+	struct GST_node *next;  	/* points to the next element in the list */ 
+	struct GST_node *prev;		/* points to the previous element in the list */
+	} *GST;						/* Keeps the status of all IOs of all nodes including the local node */
 
 
 int strfind(const char *s1, const char *s2);
@@ -71,6 +72,7 @@ void restartnet(void);
 void uptime(char *uptime);
 int getsoftwarever(char *ver);
 int broadcast(char *msg);
+int unicast(char *msg);
 
 enum {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
 	  RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, AsteriskStatRes, \
@@ -121,6 +123,7 @@ int main(int argc, char **argv){
 
 	/* Update GST with the local IOs  ==================================== */
 	GST = malloc(sizeof(GST_node));
+	uciget("siod.siod_id.id", SIOD_ID);
 	GST->siod_id = atoi(SIOD_ID);
 	GST->next=NULL;  
 	GST->prev=NULL;
@@ -304,7 +307,7 @@ int read_config(void){
 int process_udp(char *datagram){
 		
 	int n_args;
-	char *args[UDP_ARGS_MAX];  	
+	char *args[UDP_ARGS_MAX], msg[MSG_MAX];
 
 	if(verbose) printf("In process_udp() \n");
 
@@ -381,8 +384,7 @@ int process_udp(char *datagram){
 		We send our network parameters, check ConfigRes
 		*/
         case ConfigReq:{
-				char msg[MSG_MAX];
-				char MACAddressWiFi[STR_MAX], MACAddressWAN[STR_MAX], Uptime[STR_MAX], SoftwareVersion[STR_MAX], AAAA[STR_MAX];
+				char MACAddressWiFi[STR_MAX], MACAddressWAN[STR_MAX], Uptime[STR_MAX], SoftwareVersion[STR_MAX];
 				char IPAddressWiFi[STR_MAX], IPMaskWiFi[STR_MAX], IPAddressWAN[STR_MAX], IPMaskWAN[STR_MAX], Gateway[STR_MAX], DNS1[STR_MAX], DNS2[STR_MAX], DHCP[STR_MAX];
 
 				if(verbose) printf("Rcv: ConfigReq\n");
@@ -391,7 +393,6 @@ int process_udp(char *datagram){
 				MACaddress_num2str(eth1MAC(), MACAddressWAN);
             	uptime(Uptime);
             	getsoftwarever(SoftwareVersion);
-    			uciget("siod.siod_id.id", AAAA);        
 				uciget("network.mesh_0.ipaddr", IPAddressWiFi);
             	uciget("network.mesh_0.netmask", IPMaskWiFi);
             	uciget("network.wan.ipaddr", IPAddressWAN);
@@ -401,7 +402,7 @@ int process_udp(char *datagram){
 				DNS2[0]='\0'; //Don't support for now
 				uciget("network.mesh_0.proto", DHCP);
 				
-				sprintf(msg, "JNTCIT/ConfigRes/%s/%s/%s/SIOD/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s", MACAddressWiFi, MACAddressWAN, Uptime, HW_VER, SoftwareVersion, AAAA, \
+				sprintf(msg, "JNTCIT/ConfigRes/%s/%s/%s/SIOD/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s", MACAddressWiFi, MACAddressWAN, Uptime, HW_VER, SoftwareVersion, SIOD_ID, \
 						IPAddressWiFi, IPMaskWiFi, IPAddressWAN, IPMaskWAN, Gateway, DNS1, DNS2, DHCP);
 
 				printf("Sent: %s\n", msg);
@@ -571,7 +572,22 @@ int process_udp(char *datagram){
             break;
         case Set:{
 
-                if(verbose) printf("Rcv: Set\n");
+				int res;
+				char *X, *Y;
+			
+				if(verbose) printf("Rcv: Set\n");
+	
+				X=args[1]; Y=args[2];
+
+				res = setgpio(X, Y);
+				
+				if(!res){
+					sprintf(msg, "JNTCIT/Put/%s/%s/%s", SIOD_ID, X, Y);
+
+					printf("Sent: %s\n", msg);
+
+					broadcast(msg);
+				}	
 
             }
             break;
@@ -595,8 +611,22 @@ int process_udp(char *datagram){
             break;        
 		case Get:{
 
+                int res;
+                char *X, Y[STR_MAX];
+
                 if(verbose) printf("Rcv: Get\n");
 
+                X=args[1];
+
+                res = getgpio(X, Y);
+
+                if(!res){
+                    sprintf(msg, "JNTCIT/Put/%s/%s/%s", SIOD_ID, X, Y);
+
+                    printf("Sent: %s\n", msg);
+
+                    broadcast(msg);
+                }
             }
             break;        
 		case Put:{
@@ -1096,8 +1126,136 @@ int getsoftwarever(char *ver){
         return 0;
 }
 
+
+/*
+ * Broadcast UDP message
+ */
 int broadcast(char *msg){
 	
 	return(sendto(bcast_sockfd,msg,strlen(msg),0, (struct sockaddr *)&bcast_servaddr,sizeof(bcast_servaddr)));
 
 }
+
+
+/*
+ * Unicast UDP message
+ */
+int unicast(char *msg){
+
+	//TBD
+    //return(sendto(bcast_sockfd,msg,strlen(msg),0, (struct sockaddr *)&bcast_servaddr,sizeof(bcast_servaddr)));
+
+}
+
+
+/*
+ * Set local gpio
+ *
+ *	X:(optional)	index of the output [0, 1, .. gpios.gpios_count], if X is not an output an error is returned
+ *					X can be empty string. If empty it is assumed that YYYYYYYY specifies the state of all outputs. 
+ *	Y:  			Active/not active "0" or "1"
+ *	YYYYYYYY:		represent 8 digit binary number.(We have up to 8 IOs per SIOD) LSB specifies the state of the first IO, 			
+ *					MSB of the 8th IO. The values corresponding to the IOs set as inputs are ignored. 
+ *
+ */
+int setgpio(char *X, char *Y){
+
+	int x, n, fd, xlen, ylen;
+	char str[STR_MAX];
+	
+	xlen=strlen(X);
+	ylen=strlen(Y);
+	if(xlen == 1 && ylen == 1){
+		
+		x=atoi(X);
+		if (gpios.gpios[x].direction != OUT){
+			if(verbose) printf("Trying to set value to an input, ignoring\n");
+			return -1;
+		} else if (x > gpios.gpios_count-1) {
+			if(verbose) printf("Output index out of range, ignoring\n");
+			return -1;
+		} else if (Y[0] !='0' && Y[0] !='0') {
+			if(verbose) printf("Output value should be 0 or 1\n");
+		}
+          
+		if(verbose == 2) printf("Set: GPIO%d = %d\n", gpios.gpios[x].number, Y);
+		
+		n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", gpios.gpios[x].number);
+        fd = open(str, O_WRONLY);
+		n = snprintf(str, STR_MAX, "%d", atoi(Y));
+		write(fd, str, n);
+		close(fd);
+
+	} else if (xlen == 0 && ylen > 1 && ylen <= gpios.gpios_count){
+		int i;
+		for(i=0;i<ylen;i++){
+			if (gpios.gpios[i].direction == OUT && (Y[i] == '0' || Y[i] == '1')) {
+				n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", gpios.gpios[i].number);
+        		fd = open(str, O_WRONLY);
+        		n = snprintf(str, STR_MAX, "%d", Y[i]);
+        		write(fd, str, n);
+        		close(fd);
+			}
+		}
+
+	} else {
+		printf("setgpio: Invalid X and Y\n");
+		return -1;
+	} 
+		
+	return 0;
+
+}
+
+
+/*
+ * Get local gpio
+ * 
+    X:(optional)    index of the output [0, 1, .. gpios.gpios_count], 
+					optional argument, if empty the state of all IOs are returned
+                    results are returned in a strin Y. It must be alocated by the caller 
+
+ */
+int getgpio(char *X, char *Y){
+
+    int x, n, fd, xlen, ylen;
+    char str[STR_MAX];
+
+    xlen=strlen(X);
+    if(xlen == 1){
+
+        x=atoi(X);
+        if (x < 0 || x > gpios.gpios_count-1) {
+            if(verbose) printf("IO index out of range, ignoring\n");
+            return -1;
+		}
+
+        n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", gpios.gpios[x].number);
+        fd = open(str, O_RDONLY);
+        read(fd, Y, 1);
+        close(fd);
+
+		if(verbose == 2) printf("Get: GPIO%d = %s\n", gpios.gpios[x].number, Y);
+
+    } else if (xlen == 0){
+        int i;
+        for(i=0;i<gpios.gpios_count;i++){
+			n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", gpios.gpios[i].number);
+            fd = open(str, O_RDONLY);
+			read(fd, str, 1);
+			close(fd);
+			Y[i]=str[0];
+        }
+		Y[i]='\0';
+
+    } else {
+        printf("getgpio: X must be empty or represent a number \n");
+        return -1;
+    }
+
+    return 0;
+
+}
+
+
+
