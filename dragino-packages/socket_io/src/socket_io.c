@@ -283,7 +283,7 @@ int process_udp(char *datagram){
 	int n_args;
 	char *args[UDP_ARGS_MAX], msg[MSG_MAX];
 
-	if(verbose) printf("In process_udp() \n");
+	if(verbose==2) printf("In process_udp() \n");
 
 
 	/* We process only datagrams starting with JNTCIT */
@@ -300,12 +300,10 @@ int process_udp(char *datagram){
 	/* extract arguments */
 	extract_args(datagram, args, &n_args);
 
-	{//Will be delete !!!!!!!!!!!!!!!!!!!!!!!!!!!!!	
-	
+	if(verbose==2) {
 		int i;
 		for(i=0;i<n_args;i++) 
 			printf("%s\n", args[i]);
-
 	}
 
 
@@ -316,7 +314,7 @@ int process_udp(char *datagram){
 		*/		
 		case ConfigBatmanReq:{
 
-				if(verbose) printf("Rcv: ConfigBatmanReq\n");
+				if(verbose==2) printf("Rcv: ConfigBatmanReq\n");
 
 			}
 			break;
@@ -333,7 +331,7 @@ int process_udp(char *datagram){
 			/* We may fill our table about the available MACaddresses in the mesh */
 			char *MACaddress = args[1];
 			
-			if(verbose) printf("Rcv: ConfigBatmanRes\n");
+			if(verbose==2) printf("Rcv: ConfigBatmanRes\n");
 
 
             }
@@ -348,7 +346,7 @@ int process_udp(char *datagram){
 		*/
         case ConfigBatman:{
 
-				if(verbose) printf("Rcv: ConfigBatman\n");
+				if(verbose==2) printf("Rcv: ConfigBatman\n");
 
             }
             break;
@@ -361,7 +359,7 @@ int process_udp(char *datagram){
 				char MACAddressWiFi[STR_MAX], MACAddressWAN[STR_MAX], Uptime[STR_MAX], SoftwareVersion[STR_MAX];
 				char IPAddressWiFi[STR_MAX], IPMaskWiFi[STR_MAX], IPAddressWAN[STR_MAX], IPMaskWAN[STR_MAX], Gateway[STR_MAX], DNS1[STR_MAX], DNS2[STR_MAX], DHCP[STR_MAX];
 
-				if(verbose) printf("Rcv: ConfigReq\n");
+				if(verbose==2) printf("Rcv: ConfigReq\n");
 
 				MACaddress_num2str(wifiMAC(), MACAddressWiFi);
 				MACaddress_num2str(eth1MAC(), MACAddressWAN);
@@ -379,7 +377,7 @@ int process_udp(char *datagram){
 				sprintf(msg, "JNTCIT/ConfigRes/%s/%s/%s/SIOD/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s", MACAddressWiFi, MACAddressWAN, Uptime, HW_VER, SoftwareVersion, SIOD_ID, \
 						IPAddressWiFi, IPMaskWiFi, IPAddressWAN, IPMaskWAN, Gateway, DNS1, DNS2, DHCP);
 
-				printf("Sent: %s\n", msg);
+				if(verbose==2) printf("Sent: %s\n", msg);
 
 				broadcast(msg);
 
@@ -407,7 +405,7 @@ int process_udp(char *datagram){
 		*/
         case ConfigRes:{
 
-				if(verbose) printf("Rcv: ConfigRes\n");
+				if(verbose==2) printf("Rcv: ConfigRes\n");
 
             }
             break;
@@ -478,7 +476,7 @@ int process_udp(char *datagram){
 
 				MACAddress=args[1];				
 
-				if(verbose) printf("Rcv: RestartNetworkService\n");
+				if(verbose==2) printf("Rcv: RestartNetworkService\n");
 				
 				if (*MACAddress == '\0'){	
 					restartnet(); /* The optional MAC address is omitted so we restart our network service */
@@ -498,30 +496,32 @@ int process_udp(char *datagram){
             break;
         case RestartAsterisk:{
 
-				if(verbose) printf("Rcv: RestartAsterisk\n");
+				if(verbose==2) printf("Rcv: RestartAsterisk\n");
 
             }
             break;
         case ConfigAsterisk:{
 
-				if(verbose) printf("Rcv: ConfigAsterisk\n");
+				if(verbose==2) printf("Rcv: ConfigAsterisk\n");
 
             }
             break;
         case AsteriskStatReq:{
 
-				if(verbose) printf("Rcv: AsteriskStatReq\n");
+				if(verbose==2) printf("Rcv: AsteriskStatReq\n");
 
             }
             break;
         case AsteriskStatRes:{
 			
-				if(verbose) printf("Rcv: AsteriskStatRes\n");
+				if(verbose==2) printf("Rcv: AsteriskStatRes\n");
 
             }
             break;
         case ConfigNTP:{
 				char *NTPServer0, *NTPServer1, *NTPServer2, *NTPServer3, *enable_disable, *SyncTime;
+
+				if(verbose==2) printf("Rcv: ConfigNTP\n");
 
                 if(n_args != 7) {
                     printf("Wrong format of ConfigNTP message\n");
@@ -544,21 +544,36 @@ int process_udp(char *datagram){
 
             }
             break;
+		/*
+		Message: /JNTCIT/Set/X/Y
+	     		 /JNTCIT/Set//YYYY	
+		Type: Unicast
+		Arguments: 
+			X:(optional)	number of an output [0, 1, .. 3]. Current version of SIOD supports 4 outputs. 
+							X is an optional argument. If omitted it is assumed that YYYY specifies the state of all
+ 							outputs. 
+			Y:  			Active/not active [0, 1]
+			YYYY:			represents 4 digit binary number. LSB specifies the state of the first output, MSB of the 4th
+							output.     
+		Description: This command is process only by the SIOD type of devices. As a result a requested output is activated/deactivated. 
+					 On success Put package is broadcasted. If the package arrives in the out of time range moment 
+					 no output will be updated and the SIOD will broadcast a TimeRangeOut package. 
+		*/
         case Set:{
 
 				int res;
 				char *X, *Y;
 			
-				if(verbose) printf("Rcv: Set\n");
+				if(verbose==2) printf("Rcv: Set\n");
 	
 				X=args[1]; Y=args[2];
 
-				//res = setgpio(X, Y);
+				res = setgpio(X, Y);
 				
 				if(!res){
 					sprintf(msg, "JNTCIT/Put/%s/%s/%s", SIOD_ID, X, Y);
 
-					printf("Sent: %s\n", msg);
+					if(verbose==2) printf("Sent: %s\n", msg);
 
 					broadcast(msg);
 				}	
@@ -567,88 +582,116 @@ int process_udp(char *datagram){
             break;
         case SetIf:{
 
-                if(verbose) printf("Rcv: SetIf\n");
+                if(verbose==2) printf("Rcv: SetIf\n");
 
             }
             break;
         case TimeRange:{
 
-                if(verbose) printf("Rcv: TimeRange\n");
+                if(verbose==2) printf("Rcv: TimeRange\n");
 
             }
             break;
         case TimeRangeOut:{
 
-                if(verbose) printf("Rcv: TimeRangeOut\n");
+                if(verbose==2) printf("Rcv: TimeRangeOut\n");
 
             }
             break;        
+		/*
+		Message: /JNTCIT/Get/X
+	     		 /JNTCIT/Get/	
+		Type: Unicast
+		Arguments: 
+				   X:(optional)		number of an output/input [0, 1, .. 7] optional argument, 
+									if omitted the state of all IOs are requested 	
+		Description: This command is process only by the SIOD type of devices.  Put package with the requested IO value is send back to the requester. 
+		*/
 		case Get:{
 
                 int res;
                 char *X, Y[STR_MAX];
 
-                if(verbose) printf("Rcv: Get\n");
+                if(verbose==2) printf("Rcv: Get\n");
 
                 X=args[1];
 
-                //res = getgpio(X, Y);
+                res = getgpio(X, Y);
 
                 if(!res){
                     sprintf(msg, "JNTCIT/Put/%s/%s/%s", SIOD_ID, X, Y);
 
-                    printf("Sent: %s\n", msg);
+                    if(verbose==2) printf("Sent: %s\n", msg);
 
-                    broadcast(msg);
+                    unicast(msg);
                 }
             }
             break;        
+		/*
+		Message: /JNTCIT/Put/AAAA/X/Y
+	     		 /JNTCIT/Put/AAAA//YYYYYYYY	
+		Type: Broadcast
+		Arguments: All arguments are mandatory
+			AAAA:	ID of the SIOD
+			X:(optional)	number of an output /input [0, 1, .. 7]
+							optional argument. If omitted it is assumed that YYYYYYYY specifies the state of all
+							IOs. 
+			Y:    			Active/not active [0, 1]
+			YYYYYYYY:		8 digit binary number.(We have 8 IOs per SIOD) LSB specifies the state of the first IO, 				
+							MSB of the 8th IO.
+		Description: Each SIOD device in the mesh is holding the whole information of IOs for all SIODs. 
+					 The information is maintained by the Global Status Table (GST). GST should stay in sync for all SIODs. 
+					 This packet is filling a line in the GST for the given SIOD ID and IO number.  
+		*/
 		case Put:{
 
-                if(verbose) printf("Rcv: Put\n");
+                if(verbose==2) printf("Rcv: Put\n");
+
+
+
 
             }
             break;        
 		case GSTCheckSumReq:{
 
 
-                if(verbose) printf("Rcv: GSTCheckSumReq\n");
+                if(verbose==2) printf("Rcv: GSTCheckSumReq\n");
 
             }
            	break;        
 		case GSTCheckSum:{
 
-                if(verbose) printf("Rcv: GSTCheckSum\n");
+                if(verbose==2) printf("Rcv: GSTCheckSum\n");
 
             }
             break;        
 		case GSTReq:{
 
-                if(verbose) printf("Rcv: GSTReq\n");
+                if(verbose==2) printf("Rcv: GSTReq\n");
 
             }
             break;
         case GSTdata:{
 
-                if(verbose) printf("Rcv: GSTdata\n");
+                if(verbose==2) printf("Rcv: GSTdata\n");
 
             }
             break;
         case Ping:{
 
-                if(verbose) printf("Rcv: Ping\n");
+                if(verbose==2) printf("Rcv: Ping\n");
 
 			}
             break;
         case PingRes:{
 
-                if(verbose) printf("Rcv: PingRes\n");
+                if(verbose==2) printf("Rcv: PingRes\n");
 
 			}
             break;
 
 		default:
-			if(verbose) printf("Wrong command.\n");
+			printf("Wrong command.\n");
 			return -1;
 	}
 
@@ -1041,9 +1084,7 @@ int broadcast(char *msg){
  */
 int unicast(char *msg){
 
-	//TBD
-    //return(sendto(bcast_sockfd,msg,strlen(msg),0, (struct sockaddr *)&bcast_servaddr,sizeof(bcast_servaddr)));
-
+    return(sendto(udpfd,msg,strlen(msg),0, (struct sockaddr *)&cliaddr,sizeof(cliaddr)));
 }
 
 /*
