@@ -12,6 +12,8 @@
 #include <termios.h>
 #include <uci.h>
 #include <arpa/inet.h>
+#include <unistd.h>
+#include <signal.h>
 
 #define SOCKET_IO_REV   "0.1"
 #define HW_VER "0.1"	
@@ -25,14 +27,30 @@
 #define MSG_MAX     500     /* Maximum UDP message length */
 #define UDP_ARGS_MAX 20		/* we can have that much arguments ('/' separated) on the UDP datagram */ 
 
+#define REL0	16			/* GPIOs controlling the outputs */
+#define REL1    28			/* The relay address is [REL0 REL1]  so REL1 is LSB */
+#define S_R		15
+#define PULSE   1
+
+#define FB0		18			/* GPIO Feedbacks from the relay outputs*/
+#define FB1     21
+#define FB2     22
+#define FB3     27
+
+#define IN0     19          /* GPIO Inputs */
+#define IN1     20
+#define IN2     23
+#define IN3     24
+
 char SIOD_ID[STR_MAX];		/* Our SIOD ID */
 
-unsigned char GPIOS;		/* We keep the status of the 8 IOs in this byte */
+unsigned char GPIOs;		/* We keep the status of the 8 IOs in this byte   */
+							/*	GPIOS = [IN3 IN2 IN1 IN0 OUT3 OUT2 OUT1 OUT0] */
+							/*			 MSB							LSB   */ 
 
 int strfind(const char *s1, const char *s2);
 int process_udp(char *datagram);
 void RemoveSpaces(char* source);
-int read_config(void);
 int extract_args(char *datagram, char *args[], int *n_args);
 char *strupr(char *s);
 unsigned long long MACaddress_str2num(char *MACaddress);
@@ -52,15 +70,19 @@ void uptime(char *uptime);
 int getsoftwarever(char *ver);
 int broadcast(char *msg);
 int unicast(char *msg);
+int gpios_init(void);
+int setgpio(char *X, char *Y);
+int getgpio(char *X, char *Y);
+void intHandler(int dummy);
 
-enum {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
-	  RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, AsteriskStatRes, \
-	  ConfigNTP, Set, SetIf, TimeRange, TimeRangeOut, Get, Put, \
-	  GSTCheckSumReq, GSTCheckSum, GSTReq, GSTdata, Ping, PingRes};
+enum 		   {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
+	  			RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, AsteriskStatRes, \
+	  			ConfigNTP, Set, SetIf, TimeRange, TimeRangeOut, Get, Put, GSTCheckSumReq, GSTCheckSum, \
+	  			GSTReq, GSTdata, Ping, PingRes};
 char *cmds[26]={"ConfigBatmanReq", "ConfigBatmanRes", "ConfigBatman", "ConfigReq", "ConfigRes", "Config", \
-      "RestartNetworkService", "RestartAsterisk", "ConfigAsterisk", "AsteriskStatReq", "AsteriskStatRes", \
-      "ConfigNTP", "Set", "SetIf", "TimeRange", "TimeRangeOut", "Get", "Put", "GSTCheckSumReq", "GSTCheckSum", \
-	  "GSTReq", "GSTdata", "Ping", "PingRes"};
+      			"RestartNetworkService", "RestartAsterisk", "ConfigAsterisk", "AsteriskStatReq", "AsteriskStatRes", \
+      			"ConfigNTP", "Set", "SetIf", "TimeRange", "TimeRangeOut", "Get", "Put", "GSTCheckSumReq", "GSTCheckSum", \
+	  			"GSTReq", "GSTdata", "Ping", "PingRes"};
 
 int verbose=0; 	/* get value from the command line */
 
@@ -73,15 +95,25 @@ struct sockaddr_in servaddr, cliaddr;
 int bcast_sockfd;
 struct sockaddr_in bcast_servaddr;
 
+
+/* global file descriptors so we don't have to open aand close all the time */
+int fd_in0, fd_in1, fd_in2, fd_in3, fd_fb0, fd_fb1, fd_fb2, fd_fb3, fd_rel0, fd_rel1, fd_s_r, fd_pulse;
+int IOs[OUTPUTS_NUM+INPUTS_NUM];
+
+
 int main(int argc, char **argv){
 
-	int /*udpfd,*/ n, nready; 
+	int n, nready; 
 	char datagram[SOCKET_BUFLEN];
 	fd_set rset;
 	socklen_t addrlen;
-	//struct sockaddr_in servaddr, cliaddr;
 	struct timeval	timeout;
 	int res, enabled;	
+
+
+	/* CTR-C handler */
+	signal(SIGINT, intHandler);
+
 
 	/* Splash ============================================================ */
 
@@ -97,15 +129,47 @@ int main(int argc, char **argv){
 	} else
 		printf("socket_io - rev %s\n", SOCKET_IO_REV);
 
-	/* read GPIO config ================================================== */
-	read_config();	
-
-	/* Read the local input state ======================================== */
-	// TBD
+	/* Init. local IOs, outputs set as per the previous relay feedbacks == */
+	gpios_init();
 	
 	/* Retreave the local output state from the mesh GST 
        if no data available read the current relays state ================ */
 	//TBD
+/*
+	{
+		//Some tests 
+
+		int i, s_r;
+		char str1[STR_MAX], str2[STR_MAX];
+		i=0;
+		s_r=1;
+		while(1){
+			sprintf(str1, "%d", i++);
+			sprintf(str2, "%d", s_r);		
+			setgpio(str1, str2);
+
+			if(i==4) {i=0; s_r = 1-s_r;}
+			sleep(1);
+		} 
+	
+		printf( "Press [Enter] to set REL0 . . ." ); getchar();
+		setgpio("0", "1");
+
+		printf( "Press [Enter] to set REL2 . . ." ); getchar();
+		setgpio("2", "1");
+
+		printf( "Press [Enter] to clear REL2 . . ." ); getchar();
+
+		setgpio("2", "0");
+
+		printf( "Press [Enter] to set 0101 . . ." ); getchar();
+
+		setgpio("", "0101");
+		
+		printf("GPIOs=0x%x\n", GPIOs);
+	}
+
+*/
 
 	/* Initialize the broadcasting socket  =============================== */
     bcast_sockfd=socket(AF_INET,SOCK_DGRAM,0);
@@ -193,6 +257,23 @@ int main(int argc, char **argv){
 	return(0);
 
 }
+
+/* 
+ * Closes gpio descriptors on CTR-C 
+ */
+void intHandler(int dummy) {
+	if(verbose) printf("Closing all open file descriptors \n");	
+
+	close(fd_in0); close(fd_in1); close(fd_in2); close(fd_in3); 
+	close(fd_fb0); close(fd_fb1); close(fd_fb2); close(fd_fb3); 
+	close(fd_rel0); close(fd_rel1); close(fd_s_r); close(fd_pulse);
+
+	close(udpfd); close(bcast_sockfd);
+
+	exit(0);
+}
+
+
 
 /* 
  * process the data coming from the udp socket
@@ -472,7 +553,7 @@ int process_udp(char *datagram){
 	
 				X=args[1]; Y=args[2];
 
-				res = setgpio(X, Y);
+				//res = setgpio(X, Y);
 				
 				if(!res){
 					sprintf(msg, "JNTCIT/Put/%s/%s/%s", SIOD_ID, X, Y);
@@ -511,7 +592,7 @@ int process_udp(char *datagram){
 
                 X=args[1];
 
-                res = getgpio(X, Y);
+                //res = getgpio(X, Y);
 
                 if(!res){
                     sprintf(msg, "JNTCIT/Put/%s/%s/%s", SIOD_ID, X, Y);
@@ -570,67 +651,6 @@ int process_udp(char *datagram){
 			if(verbose) printf("Wrong command.\n");
 			return -1;
 	}
-
-
-/*
-
-	if(len>6) {
-		AAAA=atoin(data+3, 4);
-	} else {
-		if(verbose) printf("SIOD_ID is missing\n");	
-		return -1; 
-	}
-
-	if(len>7) 
-		X=data[7]-'0';
-	else{
-		if(verbose) printf("IO is not specified\n");
-		return -1; 
-	}
-
-	if(len>8)                
-		Y=data[8]-'0';
-        else{
-                if(verbose) printf("Value or type is not specified\n");
-                return -1; 
-        }
-
-	if(len>9){
-                if(verbose) printf("command line is to long \n");
-                return -1; 
-        } 
-
-	switch (cmd){
-	
-		case SET:// set the GPIO as per the command 
-			if (gpios.gpio[X].direction != OUT){
-				if(verbose) printf("SET command tries to set value to an input, ignoring\n");
-				return -1;
-			} else if (X > gpios.gpios_count-1) {
-				if(verbose) printf("Output out of range, ignoring\n");
-				return -1;
-			}
-			if(verbose ==2) printf("SET: GPIO%d = %d\n", gpios.gpio[X].number, Y);
-			n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", gpios.gpio[X].number);
-			fd = open(str, O_WRONLY);
-			n = snprintf(str, STR_MAX, "%d", Y);
-			write(fd, str, n);
-			close(fd);
-
-			break;
-
-		case GET:
-			break;
-
-		case PUT:
-
-			break;
-
-		case MOD:
-			break;
-
-	}
-*/
 
 	return 0;
 
@@ -1026,54 +1046,219 @@ int unicast(char *msg){
 
 }
 
+/*
+ * Initialize SIOD GPIOs. 
+ * The function opens 'value' file descriptors
+ */
+int gpios_init(void){
+
+	int fd, n, fb0, fb1, fb2, fb3;
+	char value[2], str[STR_MAX];
+
+	GPIOs=0;
+
+	/* Export the GPIOS */
+	fd = open("/sys/class/gpio/export", O_WRONLY);
+	n = snprintf(str, STR_MAX, "%d", REL0);
+	write(fd, str, n);
+	n = snprintf(str, STR_MAX, "%d", REL1);
+	write(fd, str, n);
+    n = snprintf(str, STR_MAX, "%d", S_R);
+    write(fd, str, n);
+    n = snprintf(str, STR_MAX, "%d", PULSE);
+    write(fd, str, n);
+    n = snprintf(str, STR_MAX, "%d", FB0);
+    write(fd, str, n);
+    n = snprintf(str, STR_MAX, "%d", FB1);
+    write(fd, str, n);
+    n = snprintf(str, STR_MAX, "%d", FB2);
+    write(fd, str, n);
+    n = snprintf(str, STR_MAX, "%d", FB3);
+    write(fd, str, n);
+    n = snprintf(str, STR_MAX, "%d", IN0);
+    write(fd, str, n);
+    n = snprintf(str, STR_MAX, "%d", IN1);
+    write(fd, str, n);
+    n = snprintf(str, STR_MAX, "%d", IN2);
+    write(fd, str, n);
+    n = snprintf(str, STR_MAX, "%d", IN3);
+    write(fd, str, n);
+	close(fd);
+
+	/* Configure inputs */
+	snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", FB0);
+	fd = open(str, O_WRONLY);
+	write(fd, "in", 2);
+	close(fd);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", FB1);
+    fd = open(str, O_WRONLY);
+    write(fd, "in", 2);
+    close(fd);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", FB2);
+    fd = open(str, O_WRONLY);
+    write(fd, "in", 2);
+    close(fd);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", FB3);
+    fd = open(str, O_WRONLY);
+    write(fd, "in", 2);
+    close(fd);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", IN0);
+    fd = open(str, O_WRONLY);
+    write(fd, "in", 2);
+    close(fd);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", IN1);
+    fd = open(str, O_WRONLY);
+    write(fd, "in", 2);
+    close(fd);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", IN2);
+    fd = open(str, O_WRONLY);
+    write(fd, "in", 2);
+    close(fd);    
+	snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", IN3);
+    fd = open(str, O_WRONLY);
+    write(fd, "in", 2);
+    close(fd);
+
+
+	/* read the inputs */
+	snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", IN0);
+	fd_in0 = open(str, O_RDONLY);
+	read(fd_in0, value, 2); value[2]='\0';
+	GPIOs |= ((!atoi(value)) << 4);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", IN1);
+    fd_in1 = open(str, O_RDONLY);
+    read(fd_in1, value, 2); value[2]='\0';
+    GPIOs |= ((!atoi(value)) << 5);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", IN2);
+    fd_in2 = open(str, O_RDONLY);
+    read(fd_in2, value, 2); value[2]='\0';
+    GPIOs |= ((!atoi(value)) << 6);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", IN3);
+    fd_in3 = open(str, O_RDONLY);
+    read(fd_in3, value, 2); value[2]='\0';
+    GPIOs |= ((!atoi(value)) << 7);
+
+	
+	/* read the relay feedbacks */
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", FB0);
+    fd_fb0 = open(str, O_RDONLY);
+    read(fd_fb0, value, 2); value[2]='\0';
+    fb0=atoi(value);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", FB1);
+    fd_fb1 = open(str, O_RDONLY);
+    read(fd_fb1, value, 2); value[2]='\0';
+    fb1=atoi(value);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", FB2);
+    fd_fb2 = open(str, O_RDONLY);
+    read(fd_fb2, value, 2); value[2]='\0';
+    fb2=atoi(value);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", FB3);
+    fd_fb3 = open(str, O_RDONLY);
+    read(fd_fb3, value, 2); value[2]='\0';
+    fb3=atoi(value);
+
+
+	/* configure outputs */
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", REL0);
+    fd = open(str, O_WRONLY);
+    write(fd, "low", 3);
+    close(fd);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", REL1);
+    fd = open(str, O_WRONLY);
+    write(fd, "low", 3);
+    close(fd);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", S_R);
+    fd = open(str, O_WRONLY);
+    write(fd, "low", 3);
+    close(fd);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/direction", PULSE);
+    fd = open(str, O_WRONLY);
+    write(fd, "high", 4);
+    close(fd);
+
+	/* Relays descriptors */
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", REL0);
+    fd_rel0 = open(str, O_WRONLY);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", REL1);
+    fd_rel1 = open(str, O_WRONLY);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", S_R);
+    fd_s_r = open(str, O_WRONLY);
+    snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", PULSE);
+    fd_pulse = open(str, O_WRONLY);    
+
+
+	/* Set the output information in GPIOS 
+     * GPIOS = [IN3 IN2 IN1 IN0 OUT3 OUT2 OUT1 OUT0]
+   	 *          MSB                            LSB   
+	 */
+	GPIOs |= !(fb0);
+	GPIOs |= (!(fb1) << 1);
+	GPIOs |= (!(fb2) << 2);
+	GPIOs |= (!(fb3) << 3);
+
+	/* Initialize the file descriptors in an array to ease indexing */
+	IOs[0]=fd_fb0; IOs[1]=fd_fb1; IOs[2]=fd_fb2; IOs[3]=fd_fb3;
+	IOs[4]=fd_in0; IOs[5]=fd_in1; IOs[6]=fd_in2; IOs[7]=fd_in3;
+
+	if(verbose) printf("GPIOs = 0x%x\n", GPIOs);
+
+	return 0;
+}
+
 
 /*
- * Set local gpio
+ * iet local gpio
  *
- *	X:(optional)	index of the output [0, 1, .. gpios.gpios_count], if X is not an output an error is returned
- *					X can be empty string. If empty it is assumed that YYYYYYYY specifies the state of all outputs. 
+ *	X:(optional)	index of the output [0, 1, .. 3] Current version of SIOD supports 4 outputs. 
+ *					X can be empty string. If empty it is assumed that YYYY specifies the state of all outputs. 
  *	Y:  			Active/not active "0" or "1"
- *	YYYYYYYY:		represent 8 digit binary number.(We have up to 8 IOs per SIOD) LSB specifies the state of the first IO, 			
- *					MSB of the 8th IO. The values corresponding to the IOs set as inputs are ignored. 
+ *	YYYY:			represent 4 digit binary number.(We have 4 outputs per SIOD) LSB specifies the state of the first IO, 			
+ *					MSB of the 4th output. 
  *
  */
+
+
 int setgpio(char *X, char *Y){
 
-	int x, n, fd, xlen, ylen;
+	int x, n, xlen, ylen;
 	char str[STR_MAX];
 	
 	xlen=strlen(X);
 	ylen=strlen(Y);
+
 	if(xlen == 1 && ylen == 1){
 		
 		x=atoi(X);
-		if (gpios.gpios[x].direction != OUT){
-			if(verbose) printf("Trying to set value to an input, ignoring\n");
-			return -1;
-		} else if (x > gpios.gpios_count-1) {
+		if (x < 0 || x > OUTPUTS_NUM) {
 			if(verbose) printf("Output index out of range, ignoring\n");
 			return -1;
-		} else if (Y[0] !='0' && Y[0] !='0') {
+		} else if (Y[0] !='0' && Y[0] !='1') {
 			if(verbose) printf("Output value should be 0 or 1\n");
+			return -1;
 		}
-          
-		if(verbose == 2) printf("Set: GPIO%d = %d\n", gpios.gpios[x].number, Y);
-		
-		n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", gpios.gpios[x].number);
-        fd = open(str, O_WRONLY);
-		n = snprintf(str, STR_MAX, "%d", atoi(Y));
-		write(fd, str, n);
-		close(fd);
+    
+    	write(fd_rel0, (x>1)?"1":"0", 1); write(fd_rel1, (x%2)?"1":"0", 1);
+    	write(fd_s_r, Y, 1);
+    	write(fd_pulse, "0", 1); usleep(200000L); write(fd_pulse, "1", 1);
+		      
+		GPIOs = (Y[0]-'0')?(GPIOs|(1<<x)):(GPIOs&~(1<<x));
 
-	} else if (xlen == 0 && ylen > 1 && ylen <= gpios.gpios_count){
+		if(verbose == 2) printf("Set: OUT%d = %s\n", x, Y);
+
+	} else if (xlen == 0 && ylen == OUTPUTS_NUM){
 		int i;
+		
 		for(i=0;i<ylen;i++){
-			if (gpios.gpios[i].direction == OUT && (Y[i] == '0' || Y[i] == '1')) {
-				n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", gpios.gpios[i].number);
-        		fd = open(str, O_WRONLY);
-        		n = snprintf(str, STR_MAX, "%d", Y[i]);
-        		write(fd, str, n);
-        		close(fd);
+			if (Y[i] == '0' || Y[i] == '1'){
+				
+					
+        		write(fd_rel0, (i>1)?"1":"0", 1); write(fd_rel1, (i%2)?"1":"0", 1);
+        		write(fd_s_r, (Y[OUTPUTS_NUM-1-i]-'0')?"1":"0", 1);
+        		write(fd_pulse, "0", 1); usleep(200000L); write(fd_pulse, "1", 1);
+
+				GPIOs = (Y[OUTPUTS_NUM-1-i]-'0')?(GPIOs|(1<<i)):(GPIOs&~(1<<i));
+
+				if(verbose == 2) printf("Set: OUT%d = %d\n", i, Y[OUTPUTS_NUM-1-i]-'0');
 			}
 		}
 
@@ -1081,49 +1266,47 @@ int setgpio(char *X, char *Y){
 		printf("setgpio: Invalid X and Y\n");
 		return -1;
 	} 
-		
+
 	return 0;
 
 }
 
-
 /*
  * Get local gpio
  * 
-    X:(optional)    index of the output [0, 1, .. gpios.gpios_count], 
-					optional argument, if empty the state of all IOs are returned
-                    results are returned in a strin Y. It must be alocated by the caller 
-
+ *   X:(optional)    index of the output [0, 1, .. 8], 
+ *					optional argument, if empty the state of all IOs are returned
+ *                   results are returned in a strin Y. It must be alocated by the caller 
  */
+
+
 int getgpio(char *X, char *Y){
 
-    int x, n, fd, xlen, ylen;
+    int x, xlen;
     char str[STR_MAX];
 
     xlen=strlen(X);
     if(xlen == 1){
 
         x=atoi(X);
-        if (x < 0 || x > gpios.gpios_count-1) {
+        if (x < 0 || x > 8) {
             if(verbose) printf("IO index out of range, ignoring\n");
             return -1;
 		}
 
-        n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", gpios.gpios[x].number);
-        fd = open(str, O_RDONLY);
-        read(fd, Y, 1);
-        close(fd);
+        snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", IOs[x]);
+        read(IOs[x], Y, 2); Y[2]='\0';
+		Y[0]=(Y[0]=='0')?'1':'0'; //Invererse logic for the inputs and feedbacks
 
-		if(verbose == 2) printf("Get: GPIO%d = %s\n", gpios.gpios[x].number, Y);
+		if(verbose==2) printf("Get: IO%d = %s\n", x, Y);
 
     } else if (xlen == 0){
         int i;
-        for(i=0;i<gpios.gpios_count;i++){
-			n = snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", gpios.gpios[i].number);
-            fd = open(str, O_RDONLY);
-			read(fd, str, 1);
-			close(fd);
-			Y[i]=str[0];
+        for(i=0;i<INPUTS_NUM+OUTPUTS_NUM;i++){
+			read(IOs[i], str, 2); str[2]='\0';
+			Y[INPUTS_NUM+OUTPUTS_NUM-1-i]=(str[0]=='0')?'1':'0'; //Invererse logic for the inputs and feedbacks
+
+			if(verbose==2) printf("Get: IO%d = %s\n", i, (str[0]=='0')?"1":"0");
         }
 		Y[i]='\0';
 
@@ -1133,8 +1316,5 @@ int getgpio(char *X, char *Y){
     }
 
     return 0;
-
 }
-
-
 
