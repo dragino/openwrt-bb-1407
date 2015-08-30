@@ -26,6 +26,7 @@
 #define STR_MAX		100		/* Maximum string length */
 #define MSG_MAX     500     /* Maximum UDP message length */
 #define UDP_ARGS_MAX 20		/* we can have that much arguments ('/' separated) on the UDP datagram */ 
+#define SIODS_MAX 100     	/* we may have that many SIOD devices in the mesh */ 
 
 #define REL0	16			/* GPIOs controlling the outputs */
 #define REL1    28			/* The relay address is [REL0 REL1]  so REL1 is LSB */
@@ -42,12 +43,13 @@
 #define IN2     23
 #define IN3     24
 
-char SIOD_ID[STR_MAX];		/* Our SIOD ID */
 
-unsigned char GPIOs;		/* We keep the status of the 8 IOs in this byte   */
-							/*	GPIOS = [IN3 IN2 IN1 IN0 OUT3 OUT2 OUT1 OUT0] */
-							/*			 MSB							LSB   */ 
-
+struct GST_nod {
+    int siod_id;                /* ID of the SIOD */
+    unsigned char gpios;        /* the gpio byte for the siod_id. Check GPIOs variable */
+};
+struct GST_nod GST[SIODS_MAX];  /* Keeps the status of all IOs of including the local one at the first location 
+								   the list is terminated by a zero siod_id member */
 int strfind(const char *s1, const char *s2);
 int process_udp(char *datagram);
 void RemoveSpaces(char* source);
@@ -74,6 +76,12 @@ int gpios_init(void);
 int setgpio(char *X, char *Y);
 int getgpio(char *X, char *Y);
 void intHandler(int dummy);
+unsigned char GSTchecksum(struct GST_nod *gst);
+void GSTadd(struct GST_nod *gst, unsigned short siod_id, unsigned char gpios);
+void GSTdel(struct GST_nod *gst, unsigned short siod_id);
+int GSTget(struct GST_nod *gst, unsigned short siod_id, unsigned char *gpios);
+int GSTset(struct GST_nod *gst, unsigned short siod_id, unsigned char gpios);
+void byte2binary(int n, char *str);
 
 enum 		   {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
 	  			RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, AsteriskStatRes, \
@@ -85,6 +93,13 @@ char *cmds[26]={"ConfigBatmanReq", "ConfigBatmanRes", "ConfigBatman", "ConfigReq
 	  			"GSTReq", "GSTdata", "Ping", "PingRes"};
 
 int verbose=0; 	/* get value from the command line */
+
+
+char SIOD_ID[STR_MAX];      	/* Our SIOD ID */
+
+unsigned char GPIOs;        	/* We keep the status of the 8 IOs in this byte   */
+                            	/*  GPIOS = [IN3 IN2 IN1 IN0 OUT3 OUT2 OUT1 OUT0] */
+                            	/*           MSB                            LSB   */
 
 
 /* listening socket */
@@ -129,47 +144,14 @@ int main(int argc, char **argv){
 	} else
 		printf("socket_io - rev %s\n", SOCKET_IO_REV);
 
+	/* get SIOD_ID ======================================================= */
+	uciget("siod.siod_id.id", SIOD_ID); 
+
 	/* Init. local IOs, outputs set as per the previous relay feedbacks == */
 	gpios_init();
 	
-	/* Retreave the local output state from the mesh GST 
-       if no data available read the current relays state ================ */
-	//TBD
-/*
-	{
-		//Some tests 
-
-		int i, s_r;
-		char str1[STR_MAX], str2[STR_MAX];
-		i=0;
-		s_r=1;
-		while(1){
-			sprintf(str1, "%d", i++);
-			sprintf(str2, "%d", s_r);		
-			setgpio(str1, str2);
-
-			if(i==4) {i=0; s_r = 1-s_r;}
-			sleep(1);
-		} 
-	
-		printf( "Press [Enter] to set REL0 . . ." ); getchar();
-		setgpio("0", "1");
-
-		printf( "Press [Enter] to set REL2 . . ." ); getchar();
-		setgpio("2", "1");
-
-		printf( "Press [Enter] to clear REL2 . . ." ); getchar();
-
-		setgpio("2", "0");
-
-		printf( "Press [Enter] to set 0101 . . ." ); getchar();
-
-		setgpio("", "0101");
-		
-		printf("GPIOs=0x%x\n", GPIOs);
-	}
-
-*/
+	/* Insert the local gpios data in GST================================= */
+	GSTadd(GST, atoi(SIOD_ID), GPIOs);
 
 	/* Initialize the broadcasting socket  =============================== */
     bcast_sockfd=socket(AF_INET,SOCK_DGRAM,0);
@@ -202,7 +184,16 @@ int main(int argc, char **argv){
 		exit(-1);
 	}
 
-	if(verbose) printf("Listening on port %d\n", PORT);	
+	if(verbose) printf("Listening on port %d\n", PORT);
+
+	/* broadcasst Put message so all nodes syncronize their GST ========== */
+	{
+		char msg[STR_MAX], Y[9];
+		byte2binary(GPIOs, Y);
+		sprintf(msg, "JNTCIT/Put/%s//%s", SIOD_ID, Y);
+    	if(verbose==2) printf("Sent: %s\n", msg);
+    	broadcast(msg);	
+	}
 
 	for ( ; ; ) {
 
@@ -1257,8 +1248,6 @@ int gpios_init(void){
  *					MSB of the 4th output. 
  *
  */
-
-
 int setgpio(char *X, char *Y){
 
 	int x, n, xlen, ylen;
@@ -1319,8 +1308,6 @@ int setgpio(char *X, char *Y){
  *					optional argument, if empty the state of all IOs are returned
  *                   results are returned in a strin Y. It must be alocated by the caller 
  */
-
-
 int getgpio(char *X, char *Y){
 
     int x, xlen;
@@ -1359,3 +1346,140 @@ int getgpio(char *X, char *Y){
     return 0;
 }
 
+
+/*
+ * Calculates checksum of GST data. The data are terminated by zero siod_id
+ * 
+ * Note that no special efforts have been made to sort the data records in the GST, so they may be not bit exact in all SIODs. 
+ * They should represent however the same SIOD states. The algebraic checksum used is invariant to swapping of the records. 
+ * If the checksum of the two GST is the same it is assumed that they are the same. 
+*/
+unsigned char GSTchecksum(struct GST_nod *gst){
+
+	unsigned char sum;
+	unsigned short siod_id;
+	int i;
+	sum=0; i=0;
+	while(siod_id = (gst+i)->siod_id) {
+		sum += (gst+i)->gpios + (siod_id&0xff) + ((siod_id>>8)&0xff);
+		i++;	
+	}
+	
+	return(sum);
+}
+
+/*
+ * Add siod_id, gpios data pair in the GST
+ * If siod_id already available only the gpios value is updated
+ * 
+ */
+void GSTadd(struct GST_nod *gst, unsigned short siod_id, unsigned char gpios){
+
+	int i;
+	i=0;
+    while((gst+i)->siod_id) {
+		if ((gst+i)->siod_id == siod_id) { //The siod_id found
+			(gst+i)->gpios = gpios;
+			return;
+		}
+
+		i++;
+
+		if(i>=SIODS_MAX) {
+			printf("Can not add, too much GST items already!\n");
+			return;
+		}
+	}
+
+	(gst+i)->siod_id = siod_id;
+	(gst+i)->gpios = gpios;
+}
+
+
+/*
+ * Remove item from GST. If siod_id is not found the GST is unchanged
+ * 
+ */
+void GSTdel(struct GST_nod *gst, unsigned short siod_id){
+
+    int i, j;
+    i=0; j=0;
+
+	while((gst+i)->siod_id){
+		if ((gst+i)->siod_id == siod_id) {
+			j=i;
+		}	
+		i++;
+	} 
+
+	if(j) { //If siod_id is found
+			if(j==(i-1)){ //siod_id is last item in GST
+				(gst+j)->siod_id = 0;	//make it zero
+				(gst+j)->gpios = 0;		
+			} else {
+                (gst+j)->siod_id =  (gst+i-1)->siod_id;   //Copy last item on top of the one we delete
+                (gst+j)->gpios = (gst+i-1)->gpios; 				
+
+			}
+	}
+	
+}
+
+
+/*
+ * Retreive a gpios for a given siod_id from the GST
+ * 0 if siod_id found in the GST, -1 otherwise 
+ */
+int GSTget(struct GST_nod *gst, unsigned short siod_id, unsigned char *gpios){
+
+    int i;
+    i=0;
+
+    while((gst+i)->siod_id){
+        if ((gst+i)->siod_id == siod_id) {
+            *gpios = (gst+i)->gpios;
+            return 0;
+        }
+        i++;
+    }
+
+    return -1;
+}
+
+/*
+ * Set gpios for a given siod_id to the GST
+ * 0 if siod_id found in the GST, -1 otherwise 
+ */
+int GSTset(struct GST_nod *gst, unsigned short siod_id, unsigned char gpios){
+
+    int i;
+    i=0;
+
+    while((gst+i)->siod_id){
+        if ((gst+i)->siod_id == siod_id) {
+            (gst+i)->gpios = gpios;
+            return 0;
+        }
+        i++;
+    }
+
+    return -1;
+}
+
+/*
+ * Convert byte to str representing 8 digit binary equivalent
+ * str should be allocated by the caller
+ */
+void byte2binary(int n, char *str){
+
+   int c, d, i;
+ 
+   i = 0;
+   for (c = 7; c >= 0; c--){
+		d = n>>c;
+		*(str+i) = (d & 1)?'1':'0';
+		i++;
+   }
+
+   *(str+i) = '\0';
+}
