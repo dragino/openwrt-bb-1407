@@ -50,6 +50,16 @@ struct GST_nod {
 };
 struct GST_nod GST[SIODS_MAX];  /* Keeps the status of all IOs of including the local one at the first location 
 								   the list is terminated by a zero siod_id member */
+
+
+struct IPT_nod {
+    int siod_id;                /* ID of the SIOD */
+    unsigned long IPaddress;    /* IP address we can use to send message to this SIOD */
+};
+struct IPT_nod IPT[SIODS_MAX];  /* Keeps the IP addresses of all SIODs which have ever sent some data to us. 
+								   The local IP address is not included in this table. 
+								   The list is terminated by a zero siod_id member */
+
 int strfind(const char *s1, const char *s2);
 int process_udp(char *datagram);
 void RemoveSpaces(char* source);
@@ -83,6 +93,8 @@ int GSTget(struct GST_nod *gst, unsigned short siod_id, unsigned char *gpios);
 int GSTset(struct GST_nod *gst, unsigned short siod_id, unsigned char gpios);
 void GSTprint(struct GST_nod *gst, char *str);
 void byte2binary(int n, char *str);
+int IPTget(struct IPT_nod *ipt, unsigned short siod_id, unsigned long *IPaddress);
+void IPTset(struct IPT_nod *gst, unsigned short siod_id, unsigned long IPaddress);
 
 enum 		   {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
 	  			RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, AsteriskStatRes, \
@@ -102,6 +114,7 @@ unsigned char GPIOs;        	/* We keep the status of the 8 IOs in this byte   *
                             	/*  GPIOS = [IN3 IN2 IN1 IN0 OUT3 OUT2 OUT1 OUT0] */
                             	/*           MSB                            LSB   */
 
+unsigned long IPADR;			/* Store our IP address */
 
 /* listening socket */
 int udpfd;
@@ -148,6 +161,13 @@ int main(int argc, char **argv){
 	/* get SIOD_ID ======================================================= */
 	uciget("siod.siod_id.id", SIOD_ID); 
 
+	/* Our IP address */
+	//TBD which address we will use WAN or WiFi?
+	{
+		char IPAddressWAN[STR_MAX];
+		uciget("network.wan.ipaddr", IPAddressWAN);
+		IPADR = IPaddress_str2num(IPAddressWAN);
+	}
 	/* Init. local IOs, outputs set as per the previous relay feedbacks == */
 	gpios_init();
 	
@@ -227,9 +247,13 @@ int main(int argc, char **argv){
 			} else if (n>0){
 				/* We have got an n byte datagram */
 			
-				/* reject the our own  broadcast messages */
-				//TBD
+				/* ignore our own  broadcast messages */
+				if (IPADR == cliaddr.sin_addr.s_addr){
+					if(verbose==2) printf("Ignore our broadcast message\n");
+					continue;
+				}
 
+				/* Process the datagram */ 
 				datagram[n] = '\0';
 				process_udp(datagram);
 
@@ -301,9 +325,13 @@ int process_udp(char *datagram){
 
 	switch(hashit(args[0])){
 		/*
-			ConfigBatmanReq
-
-		*/		
+		Message: JNTCIT/ConfigBatmanReq
+		Type: Broadcast
+		Arguments: 
+		Description: The CFG broadcasts this packet if he wants to get Batman configuration information for all the SIODs in the mesh. 
+					 Note that the UDP messages are not passing thru if the Batman mesh is not properly setup, so for an initial Batman 
+					 configuration it may be useful to use wired Ethernet switch connected to WAN of the SIODs.
+		*/
 		case ConfigBatmanReq:{
 
 				if(verbose==2) printf("Rcv: ConfigBatmanReq\n");
@@ -311,13 +339,20 @@ int process_udp(char *datagram){
 			}
 			break;
         /*
-       ConfigBatmanRes/MACAddress/SSID/Encryption/Passphrase/WANbridge
+		Message: JNTCIT/ConfigBatmanRes/MACAddress/SSID/Encryption/Passphrase/WANbridge
+		Type: Broadcast
+		Arguments:
 			MACAddress:(WiFi)	0a:ba:ff:10:20:30 (WiFi MAC used as reference)
 			SSID:				jntcit
 			Encryption:			WPA2
 			Passphrase:			S10D
 			WANbridge:			True, False
-
+		Description: SIOD is broadcasting this response in the network. To be able to create Batman-adv mesh 
+					 all the WiFi parameters of each SIODs should match. Some of the SIOD are configured 
+					 as mesh entry point. For those SIODs  WANbridge should be set to True. 
+					 Note that the UDP messages are not passing thru if the Batman mesh is not properly setup, 
+					 so for an initial Batman configuration it may be useful to use wired Ethernet switch 
+					 connected to Eth0 of the SIODs.
         */  
         case ConfigBatmanRes:{
 			/* We may fill our table about the available MACaddresses in the mesh */
@@ -329,12 +364,23 @@ int process_udp(char *datagram){
             }
             break;
 		/*
-		ConfigBatman/MACAddress/SSID/Encryption/Passphrase/WANbridge
+		Message: JNTCIT/ConfigBatman/MACAddress/SSID/Encryption/Passphrase/WANbridge
+	     		 JNTCIT/ConfigBatman//SSID/Encryption/Passphrase/WANbridge 	
+		Type: Broadcast
+		Arguments:
 			MACAddress:(WiFi)(optional)	0a:ba:ff:10:20:30
 			SSID:					jntcit
 			Encryption:				WPA2
 			Passphrase:				S10D
-			WANbridge:				True, False	
+			WANbridge:				True, False
+		Description: SIOD is broadcasting this response in the network. To be able to create Batman-adv mesh 
+					 all the WiFi parameters of each SIODs should match. Some of the SIOD are configured 
+					 as mesh entry point. For those SIODs  WANbridge should be set to True. 
+					 Note that the UDP messages are not passing thru if the Batman mesh is not properly setup, 
+					 so for an initial Batman configuration it may be useful to use wired Ethernet switch 
+					 connected to Eth0 of the SIODs. Only SIODs with matching MACAddress process the message. 
+					 MACAddress is an optional argument. If it is omitted all receiving SIODs will process 
+					 the message. 		
 		*/
         case ConfigBatman:{
 
@@ -343,11 +389,13 @@ int process_udp(char *datagram){
             }
             break;
 		/*
-		ConfigReq
-
-		We send our network parameters, check ConfigRes
+		Message: JNTCIT/ConfigReq
+		Type: Broadcast
+		Arguments: 
+		Description: The CFG broadcasts this packet if he wants to get information for all the SIODs in the mesh.  
 		*/
         case ConfigReq:{
+				//We send our network parameters, check ConfigRes
 				char MACAddressWiFi[STR_MAX], MACAddressWAN[STR_MAX], Uptime[STR_MAX], SoftwareVersion[STR_MAX];
 				char IPAddressWiFi[STR_MAX], IPMaskWiFi[STR_MAX], IPAddressWAN[STR_MAX], IPMaskWAN[STR_MAX], Gateway[STR_MAX], DNS1[STR_MAX], DNS2[STR_MAX], DHCP[STR_MAX];
 
@@ -376,45 +424,74 @@ int process_udp(char *datagram){
             }
             break;
 		/*
-		ConfigRes/MACAddressWiFi/MACAddressWAN/UpTime/UnitType/HardwareVersion/SoftwareVersion/AAAA/IPAddressWiFi/IPMaskWiFi/IPAddressWAN/IPMaskWAN/Gateway/DNS1/DNS2/DHCP
-			MACAddressWiFi:				0a:ba:ff:10:20:30
-			MACAddressWAN:				0a:cc:10:bb:ab:00
+		Arguments: some of the arguments are optional. In this case back slash / still signifies the parameter place holder
+			MACAddressWiFi:		0a:ba:ff:10:20:30
+			MACAddressWAN:		0a:cc:10:bb:ab:00
 			Uptime: (Linux in seconds)	123.43		
-			UnitType: 					SIOD, AsteriskPC, Intercom
-			HardwareVersion: 			0.1
-			SoftwareVersion: 			0.5(it is convenient to get this from /etc/banner)
-			AAAA: (optional)			SIOD ID Only if the UnitType is SIOD
+			UnitType: 			SIOD, AsteriskPC, Intercom
+			HardwareVersion: 		0.1
+			SoftwareVersion: 		0.5(it is convenient to get this from /etc/banner)
+			AAAA: (optional)		SIOD ID Only if the UnitType is SIOD
 			IPAddressWiFi:(optional)	10.10.0.55
 			IPMaskWiFi:(optional)		255.255.255.0
-			IPAddressWAN:(optional)		20.20.0.10
-			IPMaskWAN:(optional)		255.255.255.0
-			Gateway:(optional)			10.10.0.1
-			DNS1:(optional)				8.8.8.8
-			DNS2:(optional)				4.4.4.4
-			DHCP:(optional)				Static, dhcp
-
-		Does noting at the moment
+			IPAddressWAN:(optional)	20.20.0.10
+			IPMaskWAN:(optional)	255.255.255.0
+			Gateway:(optional)		10.10.0.1
+			DNS1:(optional)		8.8.8.8
+			DNS2:(optional)		4.4.4.4
+			DHCP:(optional)		static, dhcp
+	
+		Description: All devices in the network except the configuration PC broadcast this ConfigRes message 
+					 in response to the Config message. This way all the nodes (not only the CFG PC) can fill 
+					 their table with the available nodes in the mesh and their configuration. 
+					 SIODs have WiFi and WAN Ethernet port. Most of the SIOD are using only their WiFi interface 
+					 to participate in the Batman-adv mesh, and they don't need WAN port configured. 
+					 Some of the SIOD however are using WAN as an entry point in the mesh, and for those SIODs 
+					 we have to provide the WAN IP parameters as well. It is possible to use the SIOD in the 
+					 wire configuration. In that case on WAN IP parameters are defined. Note that both MACAddressWiFi 
+					 and MACAddressWAN parameters are mandatory. Those CFG are using to create the Config packages.  
+					 Optionally this message can be send unsolicited on the initial power up of the SIOD. 
+					 If the SIOD is still not configured then  IPAddressWiFi, IPMaskWiFi, IPAddressWAN,  
+					 IPMaskWAN, Gateway, DNS1,DNS2 and DHCP are empty.
 		*/
         case ConfigRes:{
+				//Only update our IPT at the moment		
+				char *AAAA;
 
 				if(verbose==2) printf("Rcv: ConfigRes\n");
+
+				AAAA=args[7];
+				if(AAAA[0]!='\0'){
+                	/* add the message source IPaddress to our IPT */
+                	IPTset(IPT, atoi(AAAA), cliaddr.sin_addr.s_addr);	
+				}
+				
+				
 
             }
             break;
 		/*
-		Config/MACAddress/IPAddress/IPMask/Gateway/DNS1/DNS2/DHCP
-			MACAddress:			0a:ba:ff:10:20:30
-			IPAddress:			10.10.0.55
-			IPMask:				255.255.255.0
+		Message: JNTCIT/Config/MACAddress/IPAddress/IPMask/Gateway/DNS1/DNS2/DHCP
+		Type: Broadcast
+		Arguments: some of the arguments are optional. In this case back slash / still signifies the parameter place holder
+			MACAddress:		0a:ba:ff:10:20:30
+			IPAddress:		10.10.0.55
+			IPMask:		255.255.255.0
 			Gateway:(optional)	10.10.0.1
-			DNS1:(optional)		8.8.8.8
-			DNS2:(optional)		4.4.4.4
-			DHCP:				Static, dhcp
-
-		We set our network parameters
+			DNS1:(optional)	8.8.8.8
+			DNS2:(optional)	4.4.4.4
+			DHCP:			static, dhcp
+	
+		Description: CFG sends this packet and only the SIOD device with matching MACAddress (both WiFi and WAN addresses are checked) 
+					 will process it.  SIOD will update its network configuration file and will restart its network services 
+					 so the new settings applies. SIODs have WiFi and WAN Ethernet port. Most of the SIOD are using only their 
+					 WiFi interface to participate in the Batman-adv mesh, and they don't need WAN port configured. 
+					 Some of the SIOD however are using WAN as an entry point in the mesh, and for those SIODs we have to provide 
+					 the WAN IP parameters as well. It is possible to use the SIOD in the wire configuration. In that case on WAN IP 
+					 parameters are defined.		
 		*/
         case Config:{
-
+				//We set our network parameters
 				char *MACAddress, *IPAddress, *IPMask, *Gateway, *DNS1, *DNS2, *DHCP;
 				char MACAddressWAN[STR_MAX],  MACAddressWiFi[STR_MAX];
 				unsigned long long MACAddress_num;
@@ -457,12 +534,17 @@ int process_udp(char *datagram){
             }
             break;
 		/*
-		RestartNetworkService/MACAddress
-			MACAddress:(optional)	0a:ba:ff:10:20:30
-
-		We restart network services
+		Message: JNTCIT/RestartNetworkService/MACAddress
+	     		 JNTCIT/RestartNetworkService/
+		Type: Broadcast
+		Arguments: the MACAddress  argument is optional
+			MACAddress:	(optional)	0a:ba:ff:10:20:30
+	
+		Description: CFG sends this packet and only the device with this MACAddress will restart its network services. 
+				     MACAddress is an optional argument. If it is omitted all receiving SIODs will process the message. 
 		*/
         case RestartNetworkService:{
+				//We restart network services
 				char *MACAddress;
 				unsigned long long MACAddress_num;
 
@@ -585,8 +667,14 @@ int process_udp(char *datagram){
             }
             break;
         case TimeRangeOut:{
+				char *AAAA;
 
                 if(verbose==2) printf("Rcv: TimeRangeOut\n");
+
+				AAAA = args[1];
+
+                /* add the message source IPaddress to our IPT */
+                IPTset(IPT, atoi(AAAA), cliaddr.sin_addr.s_addr);
 
             }
             break;        
@@ -650,6 +738,9 @@ int process_udp(char *datagram){
 					break;  				
 				}
 
+				/* add the message source IPaddress to our IPT */
+                IPTset(IPT, atoi(AAAA), cliaddr.sin_addr.s_addr);
+
 				if(X[0] == '\0'){ // Empty X
 					res=GSTget(GST, atoi(AAAA), &gpios);					
 					if(res == -1){
@@ -706,6 +797,9 @@ int process_udp(char *datagram){
                 if(verbose==2) printf("Rcv: GSTCheckSum\n");
 								
 				AAAA=args[1]; Sum=args[2];
+
+				/* add the message source IPaddress to our IPT */
+                IPTset(IPT, atoi(AAAA), cliaddr.sin_addr.s_addr);
 					
 				/* For now just print if our GST checksum matches */
 				sum = GSTchecksum(GST);
@@ -807,9 +901,29 @@ int process_udp(char *datagram){
 
 			}
             break;
+		/*
+		Message: /JNTCIT/PingRes/AAAA/IPAddressWiFi/IPAddressWAN
+	     		 /JNTCIT/PingRes/AAAA/IPAddressWiFi/
+		Type: Broadcast or Broadcast
+		Arguments:
+			AAAA:					local SIOD ID
+			IPAddressWiFi:			local WiFi IP address.
+			IPAddressWAN:(optional)	local WAN IP address, this argument is not used if WAN is not configured as
+									mesh entry point
+  		 	
+		Description: SIOD responding to Ping message. In the data of the message the SIOD ID and WiFi IP address are included. 
+					 If the SIOD uses its WAN as batman-adv bridge then the WAN IP address is returned too.
+		*/
         case PingRes:{
+				//TBD We will reconsider using of the IPAddressWAN here
+				char *AAAA;
 
                 if(verbose==2) printf("Rcv: PingRes\n");
+
+				AAAA = args[1];
+
+				/* add the message source IPaddress to our IPT */
+				IPTset(IPT, atoi(AAAA), cliaddr.sin_addr.s_addr);
 
 			}
             break;
@@ -1635,3 +1749,48 @@ void byte2binary(int n, char *str){
 
    *(str+i) = '\0';
 }
+
+/*
+ * Retreive an IP address for a given siod_id from the IPT
+ * 0 if siod_id found in the IPT, -1 otherwise 
+ */
+int IPTget(struct IPT_nod *ipt, unsigned short siod_id, unsigned long *IPaddress){
+
+    int i;
+    i=0;
+
+    while((ipt+i)->siod_id){
+        if ((ipt+i)->siod_id == siod_id) {
+            *IPaddress = (ipt+i)->IPaddress;
+            return 0;
+        }
+        i++;
+    }
+
+    return -1;
+}
+
+/*
+ * Set IP address for a given siod_id to the IPT
+ * If siod_id item not available in the IPT we add it at the end 
+ */
+void IPTset(struct IPT_nod *ipt, unsigned short siod_id, unsigned long IPaddress){
+
+    int i;
+    i=0;
+
+    while((ipt+i)->siod_id){
+        if ((ipt+i)->siod_id == siod_id) {
+            (ipt+i)->IPaddress = IPaddress;
+            return;
+        }
+        i++;
+    }
+
+	(ipt+i)->siod_id == siod_id;
+	(ipt+i)->IPaddress = IPaddress;	
+
+}
+
+
+
