@@ -81,7 +81,7 @@ void GSTadd(struct GST_nod *gst, unsigned short siod_id, unsigned char gpios);
 void GSTdel(struct GST_nod *gst, unsigned short siod_id);
 int GSTget(struct GST_nod *gst, unsigned short siod_id, unsigned char *gpios);
 int GSTset(struct GST_nod *gst, unsigned short siod_id, unsigned char gpios);
-void GSTprint(struct GST_nod *gst);
+void GSTprint(struct GST_nod *gst, char *str);
 void byte2binary(int n, char *str);
 
 enum 		   {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
@@ -153,38 +153,7 @@ int main(int argc, char **argv){
 	
 	/* Insert the local gpios data in GST================================= */
 	GSTadd(GST, atoi(SIOD_ID), GPIOs);
-
-	{ //test !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-		unsigned char gpios;
-		GSTprint(GST);
-		printf ( "Press [Enter] to continue . . ." ); getchar();
-
-		GSTadd(GST, 1001, 0x55);
-		GSTadd(GST, 1002, 0xaa);
-		GSTprint(GST);
-		printf ( "Press [Enter] to continue . . ." ); getchar();
-
-		GSTget(GST, 1001, &gpios);
-		printf("1001=>0x%x\n", gpios);
-		printf ( "Press [Enter] to continue . . ." ); getchar();	
-
-		GSTset(GST, 1002, 0x11);
-        GSTget(GST, 1002, &gpios);
-        printf("1002=>0x%x\n", gpios);
-		printf ( "Press [Enter] to continue . . ." ); getchar();
-
-		GSTadd(GST, 1001, 0x22);
-		GSTprint(GST);
-		printf ( "Press [Enter] to continue . . ." ); getchar();
-
-		GSTdel(GST, 1002);
-		GSTprint(GST);
-		
-		
-
-	}
-
-
+	
 	/* Initialize the broadcasting socket  =============================== */
     bcast_sockfd=socket(AF_INET,SOCK_DGRAM,0);
     enabled = 1;
@@ -667,42 +636,174 @@ int process_udp(char *datagram){
 					 This packet is filling a line in the GST for the given SIOD ID and IO number.  
 		*/
 		case Put:{
+				char *AAAA, *X, *Y;
+				unsigned char gpios;
+				int res;
 
                 if(verbose==2) printf("Rcv: Put\n");
+
+				AAAA=args[1]; X=args[2]; Y=args[3];
+
 				/* Update the local GST with the information from the message */
-				//TBD	
-				
+				if(!strcmp(AAAA, SIOD_ID)) {
+					if(verbose==2) printf("Ignoring Put message for our SIOD_ID\n");	
+					break;  				
+				}
 
+				if(X[0] == '\0'){ // Empty X
+					res=GSTget(GST, atoi(AAAA), &gpios);					
+					if(res == -1){
+						printf("/JNTCIT/Put/AAAA/X/Y message ignored as we don't have SIOD_ID=%s in the GST\n", AAAA);
+						break; 
+					}
+					
+					GSTset(GST, atoi(AAAA), (Y[0]=='1')?(gpios|(1<<atoi(X))):(gpios&~(1<<atoi(X))));
+
+				} else {
+					GSTadd(GST, atoi(AAAA), atoi(Y));
+				}	
+			
             }
-            break;        
+            break;
+		/*	
+		Message: /JNTCIT/GSTCheckSumReq
+		Type: Broadcast
+		Arguments: 	
+		Description: Each SIOD device in the mesh is holding the whole information of IOs for all SIODs. 
+					 The information is maintained by the Global Status Table (GST). GST should stay in sync for all SIODs. 
+					 Once in a while each SIOD (or CFG) can broadcast this request for a GST check sum. 
+					 After receiving the check sum from the other nodes based on some heuristics it can decide to request 
+					 a GST from a certain SIOD.
+        */
 		case GSTCheckSumReq:{
-
-
+				
                 if(verbose==2) printf("Rcv: GSTCheckSumReq\n");
 
+				/* Send our GST check sum */
+				sprintf(msg, "JNTCIT/GSTCheckSum/%s/%d", SIOD_ID, GSTchecksum(GST));
+				if(verbose==2) printf("Sent: %s\n", msg);
+				broadcast(msg);
             }
-           	break;        
+           	break; 
+		/*
+		Message: /JNTCIT/GSTCheckSum/AAAA/Sum
+		Type: Broadcast
+		Arguments: All arguments are mandatory
+			AAAA:		SIOD ID	
+			Sum:		The Check Sum of the GST
+		Description: Each SIOD device in the mesh is holding the whole information of IOs for all SIODs. 
+					 The information is maintained by the Global Status Table (GST). GST should stay in sync for all SIODs. 
+					 Once in a while each SIOD (or CFG) can broadcast this request for a GST check sum. 
+					 After receiving the check sum from the other nodes based on some heuristics it can decide to request 
+					 a GST from a certain SIOD. With this package all SIODs broadcasts the check sum of the GST they hold. 
+					 GST checksum is defined as an algebraic sum of all octets modulo 256 in the GST data. See the GST packet example.
+		*/
 		case GSTCheckSum:{
 
+				char *AAAA, *Sum;
+				unsigned char sum;
+
                 if(verbose==2) printf("Rcv: GSTCheckSum\n");
-
-            }
-            break;        
-		case GSTReq:{
-
-                if(verbose==2) printf("Rcv: GSTReq\n");
+								
+				AAAA=args[1]; Sum=args[2];
+					
+				/* For now just print if our GST checksum matches */
+				sum = GSTchecksum(GST);
+				if(atoi(Sum) == sum)
+					printf("Got checksum which match with ours\n");
+				else
+					printf("From %s got checksum %s. It differs from our GST checksum %d\n", AAAA, Sum, sum);
 
             }
             break;
+		/*
+		Message: /JNTCIT/GSTReq
+		Type: Unicast
+		Arguments: 	
+		Description: Each SIOD device in the mesh is holding the whole information of IOs for all SIODs. 
+					 The information is maintained by the Global Status Table (GST). GST should stay in sync for all SIODs. 
+					 A SIOD requests the GST from a certain SIOD using this message. Note that no special efforts have been made 
+					 to sort the data records in the GST, so they may be not bit exact in all SIODs. They should represent however 
+					 the same SIOD states. The algebraic checksum used is invariant to swapping of the records. 
+					 If the checksum of the two GST is the same it is assumed that their GST are the same.
+		*/
+		case GSTReq:{
+
+				char GSTtextdata[STR_MAX];
+
+                if(verbose==2) printf("Rcv: GSTReq\n");
+			
+				/* Send our GST */
+				GSTprint(GST, GSTtextdata);
+				sprintf(msg, "JNTCIT/GSTdata/%s", GSTtextdata);
+				if(verbose==2) printf("Sent: %s\n", msg);
+				unicast(msg);
+
+            }
+            break;
+		/*
+		Message: /JNTCIT/GSTdata/Data
+		Type: Unicast
+		Arguments: 	Data is mandatory argument
+		Data: 	GST sent in the UDP message body. The following text format is used  
+				SIOD_ID0, IO_STATE; ...
+				Example:
+ 				1000,255;1001,14; ...
+				For a SIOD_ID=1000 all the outputs (IO3..IO0) are set to be active and all the inputs IO7..IO4 reads 
+				as logic high.
+				For a SIOD_ID=1001 all the outputs (IO3..IO0) are set to be inactive except IO3 and all the inputs
+				(IO7..IO4) reads as logic low except IO4.
+				The above partial GST data has check sum (algebraic sum of all data octets module 256) 228
+		Description: Each SIOD device in the mesh is holding the whole information of IOs for all SIODs. 
+					 The information is maintained by a data structure called Global Status Table (GST). 
+					 GSTs should stay in sync for all SIODs. This message pass the whole GST data. 
+					 Note that no special efforts have been made to sort the data records in the GST, 
+					 so they may be not bit exact in all SIODs. They should represent however the same SIOD states. 
+					 The algebraic checksum used is invariant to swapping of the records. 
+					 If the checksum of the two GST is the same it is assumed that they are the same.
+		*/ 
         case GSTdata:{
+
+				char *Data;
 
                 if(verbose==2) printf("Rcv: GSTdata\n");
 
+				Data=args[1];
+
+				/* For now just display the received GST data */
+				printf("%s\n", Data);
+
             }
             break;
+		/*
+		Message: /JNTCIT/Ping/AAAA  (broadcast)
+	     		 /JNTCIT/Ping/	    (unicast)
+		Type: Unicast or Broadcast
+		Arguments:
+			AAAA:(optional)		SIOD ID 	
+		Description: Each SIOD is keeping IP Address, SIOD ID pair in a local table. 
+					 Sometimes it is convenient to be able to retrieve this information from the mesh. 
+					 If a mesh node knows SIOD IP address is available in the mesh and would like to get
+					 SIOD ID it can unicast Ping message without AAAA argument. 
+					 If an IP address for a given SIOD ID is requested the node may broadcast Ping message with AAAA argument. 
+					 Mesh will respond with PingRes message.
+		*/
         case Ping:{
 
+				char *AAAA, IPAddressWiFi[STR_MAX];
+
                 if(verbose==2) printf("Rcv: Ping\n");
+
+				AAAA = args[1];
+
+				if(AAAA[0]=='\0' || !strcmp(AAAA, SIOD_ID)) { //AAAA is empty or our SIOD_ID matches so we we need to respond
+					//TBD needs to add logic to determine if IPAddressWAN is required
+					//For now just return the WiFi address
+					uciget("network.mesh_0.ipaddr", IPAddressWiFi);
+					sprintf(msg, "JNTCIT/PingRes/%s", IPAddressWiFi);
+					if(verbose==2) printf("Sent: %s\n", msg);
+					unicast(msg);											
+				}
 
 			}
             break;
@@ -1501,15 +1602,18 @@ int GSTset(struct GST_nod *gst, unsigned short siod_id, unsigned char gpios){
 
 
 /*
- * Print GST
+ * Print GST in a string. 
+ * Note that caller should allocate the str memory
  */
-void GSTprint(struct GST_nod *gst){
+void GSTprint(struct GST_nod *gst, char *str){
 
     int i;
-    i=0;
+	char gpios[9];	
+
+	str[0]='\0';i=0;
     while((gst+i)->siod_id){
-        
-		printf("siod_id=%d, gpios=0x%x\n", (gst+i)->siod_id, (gst+i)->gpios);
+        byte2binary((gst+i)->gpios, gpios);
+		sprintf(str, "%d,%s;", (gst+i)->siod_id, gpios);
 		i++;
     }
 }
