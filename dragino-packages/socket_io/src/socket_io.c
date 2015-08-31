@@ -81,6 +81,7 @@ void GSTadd(struct GST_nod *gst, unsigned short siod_id, unsigned char gpios);
 void GSTdel(struct GST_nod *gst, unsigned short siod_id);
 int GSTget(struct GST_nod *gst, unsigned short siod_id, unsigned char *gpios);
 int GSTset(struct GST_nod *gst, unsigned short siod_id, unsigned char gpios);
+void GSTprint(struct GST_nod *gst);
 void byte2binary(int n, char *str);
 
 enum 		   {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
@@ -152,6 +153,37 @@ int main(int argc, char **argv){
 	
 	/* Insert the local gpios data in GST================================= */
 	GSTadd(GST, atoi(SIOD_ID), GPIOs);
+
+	{ //test !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+		unsigned char gpios;
+		GSTprint(GST);
+		printf ( "Press [Enter] to continue . . ." ); getchar();
+
+		GSTadd(GST, 1001, 0x55);
+		GSTadd(GST, 1002, 0xaa);
+		GSTprint(GST);
+		printf ( "Press [Enter] to continue . . ." ); getchar();
+
+		GSTget(GST, 1001, &gpios);
+		printf("1001=>0x%x\n", gpios);
+		printf ( "Press [Enter] to continue . . ." ); getchar();	
+
+		GSTset(GST, 1002, 0x11);
+        GSTget(GST, 1002, &gpios);
+        printf("1002=>0x%x\n", gpios);
+		printf ( "Press [Enter] to continue . . ." ); getchar();
+
+		GSTadd(GST, 1001, 0x22);
+		GSTprint(GST);
+		printf ( "Press [Enter] to continue . . ." ); getchar();
+
+		GSTdel(GST, 1002);
+		GSTprint(GST);
+		
+		
+
+	}
+
 
 	/* Initialize the broadcasting socket  =============================== */
     bcast_sockfd=socket(AF_INET,SOCK_DGRAM,0);
@@ -298,7 +330,7 @@ int process_udp(char *datagram){
 	}
 
 
-	switch (hashit(args[0])){
+	switch(hashit(args[0])){
 		/*
 			ConfigBatmanReq
 
@@ -637,9 +669,9 @@ int process_udp(char *datagram){
 		case Put:{
 
                 if(verbose==2) printf("Rcv: Put\n");
-
-
-
+				/* Update the local GST with the information from the message */
+				//TBD	
+				
 
             }
             break;        
@@ -1403,8 +1435,8 @@ void GSTadd(struct GST_nod *gst, unsigned short siod_id, unsigned char gpios){
 void GSTdel(struct GST_nod *gst, unsigned short siod_id){
 
     int i, j;
-    i=0; j=0;
 
+    i=0; j=-1;
 	while((gst+i)->siod_id){
 		if ((gst+i)->siod_id == siod_id) {
 			j=i;
@@ -1412,19 +1444,20 @@ void GSTdel(struct GST_nod *gst, unsigned short siod_id){
 		i++;
 	} 
 
-	if(j) { //If siod_id is found
-			if(j==(i-1)){ //siod_id is last item in GST
-				(gst+j)->siod_id = 0;	//make it zero
-				(gst+j)->gpios = 0;		
-			} else {
-                (gst+j)->siod_id =  (gst+i-1)->siod_id;   //Copy last item on top of the one we delete
-                (gst+j)->gpios = (gst+i-1)->gpios; 				
-
-			}
+	if(j != -1) { //If siod_id is found
+		if(j==(i-1)){ //siod_id is last item in GST
+			(gst+j)->siod_id = 0;	//make it zero
+			(gst+j)->gpios = 0;		
+		} else {
+			(gst+j)->siod_id =  (gst+i-1)->siod_id;   //Copy last item on top of the one we delete
+			(gst+j)->gpios = (gst+i-1)->gpios; 		
+			
+			(gst+i-1)->siod_id = 0;					  // and delete the last item 	
+			(gst+i-1)->gpios = 0; 		
+		}
 	}
 	
 }
-
 
 /*
  * Retreive a gpios for a given siod_id from the GST
@@ -1464,6 +1497,21 @@ int GSTset(struct GST_nod *gst, unsigned short siod_id, unsigned char gpios){
     }
 
     return -1;
+}
+
+
+/*
+ * Print GST
+ */
+void GSTprint(struct GST_nod *gst){
+
+    int i;
+    i=0;
+    while((gst+i)->siod_id){
+        
+		printf("siod_id=%d, gpios=0x%x\n", (gst+i)->siod_id, (gst+i)->gpios);
+		i++;
+    }
 }
 
 /*
