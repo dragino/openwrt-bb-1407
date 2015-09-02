@@ -27,6 +27,8 @@
 #define MSG_MAX     500     /* Maximum UDP message length */
 #define UDP_ARGS_MAX 20		/* we can have that much arguments ('/' separated) on the UDP datagram */ 
 #define SIODS_MAX 100     	/* we may have that many SIOD devices in the mesh */ 
+#define SECSINDAY (24*60*60) /* That many seconds in a day */
+#define DAYSINWEEK (7) 		/* That many days in a week*/ 
 
 #define REL0	16			/* GPIOs controlling the outputs */
 #define REL1    28			/* The relay address is [REL0 REL1]  so REL1 is LSB */
@@ -95,6 +97,9 @@ void GSTprint(struct GST_nod *gst, char *str);
 void byte2binary(int n, char *str);
 int IPTget(struct IPT_nod *ipt, unsigned short siod_id, unsigned long *IPaddress);
 void IPTset(struct IPT_nod *gst, unsigned short siod_id, unsigned long IPaddress);
+int ParseTimeRange(char *TimeRangeStr);
+int CheckTimeRange(void);
+
 
 enum 		   {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
 	  			RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, AsteriskStatRes, \
@@ -129,6 +134,13 @@ struct sockaddr_in bcast_servaddr;
 int fd_in0, fd_in1, fd_in2, fd_in3, fd_fb0, fd_fb1, fd_fb2, fd_fb3, fd_rel0, fd_rel1, fd_s_r, fd_pulse;
 int IOs[OUTPUTS_NUM+INPUTS_NUM];
 
+/* Time Range definitions */
+struct {
+	struct tm start;	//Start broken time 
+	struct tm end;		//End broken time 
+
+} TIMERANGE;
+
 
 int main(int argc, char **argv){
 
@@ -145,6 +157,25 @@ int main(int argc, char **argv){
 
 
 	/* Splash ============================================================ */
+	{
+		//Test time functions
+/*		if(parsetimerange("/7:00:00-23:59:59")) printf("Error1\n");
+		if(parsetimerange("/0:0:0-6:59:59")) printf("Error2\n");
+		if(parsetimerange("6/")) printf("Error3\n");
+		if(ParseTimeRange("20July2015/0:0:0-23:59:59")) printf("Error4\n");
+*/
+		if(ParseTimeRange("4-1/")) printf("Error5\n");
+/*		if(parsetimerange("/")) printf("Error6\n");
+*/
+		verbose=2;	
+		if(CheckTimeRange()) 
+			printf("!!!!!!!! In the range !!!!!!!!!!!\n");
+		else
+			printf("!!!!!!!! Out of range !!!!!!!!!!!\n");
+
+	}
+
+
 
 	/* Check for verbosity argument */
 	if(argc>1) {
@@ -1792,5 +1823,212 @@ void IPTset(struct IPT_nod *ipt, unsigned short siod_id, unsigned long IPaddress
 
 }
 
+/*
+This function parse the TimeRnage as defined by the message
 
+	Examples:
+	     Daylight     			
+	     /7:00:00-23:59:59
+
+	     Night 	
+	     /0:0:0-6:59:59
+
+	     Saturday	
+	     6/
+
+	     Sunday	
+	     0/0:0:0-23:59:59
+
+	     Arbitrary single range 	
+	     20July2015/14:00:00-14:59:59
+
+	     To clear the time range
+	     /			
+Arguments:
+	Date:(optional)		Exact date 20July2015 or day in the week index (Monday 1, Sunday 0). Date ranges
+						like 20July2015-25July2015 or 3-5 is also supported. Optional argument. If omitted
+						any date assumed.
+	Time:(optional)		Time range specification in a format. hh1:mm1:ss1- hh2:mm2:ss2. If the second time
+						point is smaller then the first one (and the Date doesn't specify a range) it is assumed
+						that the second time is a sample from the next day. Optional argument, if omitted any
+						range withing specified Date assumed.     
+Function returns 0 if manage to parse the data or -1 otherwise
+*/
+int ParseTimeRange(char *TimeRangeStr){
+
+	char date[STR_MAX], time[STR_MAX], date1[STR_MAX], date2[STR_MAX],  time1[STR_MAX], time2[STR_MAX], start[STR_MAX], end[STR_MAX];
+	char TimeRangeStr_[STR_MAX];
+	char *args[2];
+	int n_args, repetitive_date,  repetitive_time; 
+
+
+	repetitive_date=0;
+	repetitive_time=0;	
+	strcpy(TimeRangeStr_, TimeRangeStr);
+	extract_args(TimeRangeStr_, args,  &n_args);
+	if(n_args != 2){
+        printf("Wrong TimeRange format\n");
+
+		return -1;
+	}
+
+	strcpy(date, args[0]);
+	strcpy(time, args[1]);
+
+	printf("date=%s\n", date);
+	printf("time=%s\n", time);		
+			
+	if(date[0]=='\0') {strcpy(date, "0-0"); repetitive_date=1;}//So strptime parsing works
+	if(time[0]=='\0') {strcpy(time, "00:00:00-00:00:00"); repetitive_time=1;} //So strptime parsing works
+    printf("date=%s\n", date);
+    printf("time=%s\n", time); 
+
+	if(strfind(date, "-")){
+		strcpy(date1, date);
+		strcpy(date2, date);
+    } else if(sscanf(date,"%[^-]-%[^-]", date1, date2) != 2){
+        printf("Wrong TimeRange format\n");
+        return -1;
+    }
+
+    if(strfind(time, "-")){
+        strcpy(time1, time);
+        strcpy(time2, time);
+    } else if(sscanf(time,"%[^-]-%[^-]", time1, time2) != 2){
+        printf("Wrong TimeRange format\n");
+        return -1;
+    }
+
+	sprintf(start, "%s %s", date1, time1);
+	sprintf(end, "%s %s", date2, time2);
+
+    printf("start=%s\n", start);
+    printf("end=%s\n", end); 
+
+	if (strptime(start, "%d%b%Y %H:%M:%S", &TIMERANGE.start) == 0){
+		if (strptime(start, "%w %H:%M:%S", &TIMERANGE.start) == 0)
+			return -1;
+	}
+		
+
+    if (strptime(end, "%d%b%Y %H:%M:%S", &TIMERANGE.end) == 0){
+        if (strptime(end, "%w %H:%M:%S", &TIMERANGE.end) == 0)
+            return -1;
+    }
+
+	if(repetitive_date){
+		TIMERANGE.start.tm_mday=-1;
+		TIMERANGE.start.tm_mon=-1;
+		TIMERANGE.start.tm_year=-1;
+
+        TIMERANGE.end.tm_mday=-1;
+        TIMERANGE.end.tm_mon=-1;
+        TIMERANGE.end.tm_year=-1;
+	}
+
+    if(repetitive_time){
+        TIMERANGE.start.tm_sec=-1;
+        TIMERANGE.start.tm_min=-1;
+        TIMERANGE.start.tm_hour=-1;
+
+        TIMERANGE.end.tm_sec=-1;
+        TIMERANGE.end.tm_min=-1;
+        TIMERANGE.end.tm_hour=-1;
+    }
+
+	return 0;
+}
+
+/*
+ *	Check if current system time is in the TimeRange
+ *	Returns 1 if in time range and 0 otherwise  
+ */
+int CheckTimeRange(void){
+
+	time_t start, end, now;
+	struct tm start_, end_, now_;
+
+	start_=TIMERANGE.start;
+	end_=TIMERANGE.end;
+
+	/* now */
+	time(&now);
+	localtime_r(&now, &now_);
+
+	if(TIMERANGE.start.tm_mday == -1 ){
+
+		if(verbose==2) printf("CheckTimeRange: Date repetition\n");
+
+		start_.tm_mday =  now_.tm_mday;
+		start_.tm_year = now_.tm_year;
+		start_.tm_mon = now_.tm_mon;
+
+		end_.tm_mday =  now_.tm_mday;
+		end_.tm_year = now_.tm_year;
+		end_.tm_mon = now_.tm_mon;
+
+		start=mktime(&start_);
+		end=mktime(&end_);
+
+	}
+    
+	if(TIMERANGE.start.tm_min == -1 ){
+
+		if(verbose==2) printf("CheckTimeRange: Time repetition\n");
+
+		start_.tm_sec =  now_.tm_sec;
+		start_.tm_min = now_.tm_min;
+		start_.tm_hour = now_.tm_hour;
+
+		end_.tm_sec =  now_.tm_sec;
+		end_.tm_min = now_.tm_min;
+		end_.tm_hour = now_.tm_hour;
+
+		start=mktime(&start_);
+		end=mktime(&end_);
+	}
+
+	if (TIMERANGE.start.tm_year == 0){ //Date defined as week day. 
+
+		if(verbose==2) printf("CheckTimeRange: Week repetition\n");
+
+		/* into time_t converting to moments around now */
+		start_.tm_mday =  now_.tm_mday;
+		start_.tm_year = now_.tm_year;
+		start_.tm_mon = now_.tm_mon;
+		start=mktime(&start_);
+
+		end_.tm_mday =  now_.tm_mday;
+		end_.tm_year = now_.tm_year;
+		end_.tm_mon = now_.tm_mon;
+		end=mktime(&end_);
+
+		start = start+(TIMERANGE.start.tm_wday-now_.tm_wday)*SECSINDAY;
+
+		if(TIMERANGE.end.tm_wday >= TIMERANGE.start.tm_wday){
+
+			if(verbose==2) printf("CheckTimeRange: Interval spana a single week (sun, mon .. sat)\n");
+
+			end = end+(TIMERANGE.end.tm_wday-now_.tm_wday)*SECSINDAY;
+
+		} else {
+			
+			if(verbose==2) printf("CheckTimeRange: 'end' is from the next week\n");
+
+			end = end+(TIMERANGE.end.tm_wday-now_.tm_wday+DAYSINWEEK)*SECSINDAY;
+		}
+
+		return (now>=start && now<=end)?1:0;
+
+
+	} else { //Concret start-stop
+
+
+		if(verbose==2) printf("CheckTimeRange: concrete range\n");
+
+		return (now>=start && now<=end)?1:0;
+
+	}
+
+}
 
