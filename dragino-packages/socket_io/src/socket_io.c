@@ -157,25 +157,6 @@ int main(int argc, char **argv){
 
 
 	/* Splash ============================================================ */
-	{
-		//Test time functions
-/*		if(parsetimerange("/7:00:00-23:59:59")) printf("Error1\n");
-		if(parsetimerange("/0:0:0-6:59:59")) printf("Error2\n");
-		if(parsetimerange("6/")) printf("Error3\n");
-		if(ParseTimeRange("20July2015/0:0:0-23:59:59")) printf("Error4\n");
-*/
-		if(ParseTimeRange("4-1/")) printf("Error5\n");
-/*		if(parsetimerange("/")) printf("Error6\n");
-*/
-		verbose=2;	
-		if(CheckTimeRange()) 
-			printf("!!!!!!!! In the range !!!!!!!!!!!\n");
-		else
-			printf("!!!!!!!! Out of range !!!!!!!!!!!\n");
-
-	}
-
-
 
 	/* Check for verbosity argument */
 	if(argc>1) {
