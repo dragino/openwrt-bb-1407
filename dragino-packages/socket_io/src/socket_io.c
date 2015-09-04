@@ -29,6 +29,7 @@
 #define SIODS_MAX 100     	/* we may have that many SIOD devices in the mesh */ 
 #define SECSINDAY (24*60*60) /* That many seconds in a day */
 #define DAYSINWEEK (7) 		/* That many days in a week*/ 
+#define RULES_MAX	10		/* We may have not more than that many rules in the PLC table */
 
 #define REL0	16			/* GPIOs controlling the outputs */
 #define REL1    28			/* The relay address is [REL0 REL1]  so REL1 is LSB */
@@ -61,6 +62,12 @@ struct IPT_nod {
 struct IPT_nod IPT[SIODS_MAX];  /* Keeps the IP addresses of all SIODs which have ever sent some data to us. 
 								   The local IP address is not included in this table. 
 								   The list is terminated by a zero siod_id member */
+
+struct {
+	int	n;						/* amount of active rules */
+	char *rules[RULES_MAX];		/* Keep the rules in string form */
+} PLCT;
+
 
 int strfind(const char *s1, const char *s2);
 int process_udp(char *datagram);
@@ -99,16 +106,19 @@ int IPTget(struct IPT_nod *ipt, unsigned short siod_id, unsigned long *IPaddress
 void IPTset(struct IPT_nod *gst, unsigned short siod_id, unsigned long IPaddress);
 int ParseTimeRange(char *TimeRangeStr);
 int CheckTimeRange(void);
+int PLCadd(char *rule);
+int PLCdel(char *AAAA1, char *X1, char *Y1);
+void PLCprint(char *);
 
 
 enum 		   {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
-	  			RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, AsteriskStatRes, \
-	  			ConfigNTP, Set, SetIf, TimeRange, TimeRangeOut, Get, Put, GSTCheckSumReq, GSTCheckSum, \
-	  			GSTReq, GSTdata, Ping, PingRes};
+	  			RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, \ 
+				AsteriskStatRes, ConfigNTP, Set, PLC, PLCReq, PLCRes, TimeRange, TimeRangeOut, \
+				Get, Put, GSTCheckSumReq, GSTCheckSum, GSTReq, GSTdata, Ping, PingRes};
 char *cmds[26]={"ConfigBatmanReq", "ConfigBatmanRes", "ConfigBatman", "ConfigReq", "ConfigRes", "Config", \
-      			"RestartNetworkService", "RestartAsterisk", "ConfigAsterisk", "AsteriskStatReq", "AsteriskStatRes", \
-      			"ConfigNTP", "Set", "SetIf", "TimeRange", "TimeRangeOut", "Get", "Put", "GSTCheckSumReq", "GSTCheckSum", \
-	  			"GSTReq", "GSTdata", "Ping", "PingRes"};
+      			"RestartNetworkService", "RestartAsterisk", "ConfigAsterisk", "AsteriskStatReq", \
+				"AsteriskStatRes","ConfigNTP", "Set", "PLC",  "PLCReq", "PLCRes", "TimeRange", "TimeRangeOut", \
+				"Get", "Put", "GSTCheckSumReq", "GSTCheckSum", "GSTReq", "GSTdata", "Ping", "PingRes"};
 
 int verbose=0; 	/* get value from the command line */
 
@@ -136,6 +146,8 @@ int IOs[OUTPUTS_NUM+INPUTS_NUM];
 
 /* Time Range definitions */
 struct {
+	char Date[STR_MAX];	//To keep the TimeRange text parameter
+	char Time[STR_MAX];	//To keep the TimeRange text parameter
 	struct tm start;	//Start broken time 
 	struct tm end;		//End broken time 
 
@@ -157,6 +169,9 @@ int main(int argc, char **argv){
 
 
 	/* Splash ============================================================ */
+
+	/* We don't have rules in the PLC table ============================== */
+	PLCT.n=0;
 
 	/* Check for verbosity argument */
 	if(argc>1) {
@@ -290,13 +305,18 @@ int main(int argc, char **argv){
  * Closes gpio descriptors on CTR-C 
  */
 void intHandler(int dummy) {
-	if(verbose) printf("Closing all open file descriptors \n");	
+	int i;
+
+	if(verbose) printf("Closing/free all open file descriptors and PLC rules\n");	
 
 	close(fd_in0); close(fd_in1); close(fd_in2); close(fd_in3); 
 	close(fd_fb0); close(fd_fb1); close(fd_fb2); close(fd_fb3); 
 	close(fd_rel0); close(fd_rel1); close(fd_s_r); close(fd_pulse);
 
 	close(udpfd); close(bcast_sockfd);
+	
+	/* free PLC rules memory */
+	for(i=0; i<PLCT.n; i++) free(PLCT.rules[i]);	
 
 	exit(0);
 }
@@ -361,7 +381,7 @@ int process_udp(char *datagram){
 			WANbridge:			True, False
 		Description: SIOD is broadcasting this response in the network. To be able to create Batman-adv mesh 
 					 all the WiFi parameters of each SIODs should match. Some of the SIOD are configured 
-					 as mesh entry point. For those SIODs  WANbridge should be set to True. 
+					 as mes entry point. For those SIODs  WANbridge should be set to True. 
 					 Note that the UDP messages are not passing thru if the Batman mesh is not properly setup, 
 					 so for an initial Batman configuration it may be useful to use wired Ethernet switch 
 					 connected to Eth0 of the SIODs.
@@ -654,30 +674,186 @@ int process_udp(char *datagram){
 	
 				X=args[1]; Y=args[2];
 
-				res = setgpio(X, Y);
+				if(CheckTimeRange()){	
+					res = setgpio(X, Y);
 				
-				if(!res){
-					sprintf(msg, "JNTCIT/Put/%s/%s/%s", SIOD_ID, X, Y);
+					if(!res){
+						sprintf(msg, "JNTCIT/Put/%s/%s/%s", SIOD_ID, X, Y);
+
+						if(verbose==2) printf("Sent: %s\n", msg);
+
+						broadcast(msg);
+					}	
+				} else {
+					//Send TimeRangeOut to the caller
+					sprintf(msg, "JNTCIT/TimeRangeOut/%s/%s/%s", SIOD_ID, TIMERANGE.Date, TIMERANGE.Time);
 
 					if(verbose==2) printf("Sent: %s\n", msg);
 
-					broadcast(msg);
-				}	
+					unicast(msg);
+
+				}
 
             }
             break;
-        case SetIf:{
+		/*
+		Message: /JNTCIT/PLC/AAAA1/X1/Y1/AAAA2/X2/Y2/and_or/AAAA3/X3/Y3
+	     		 /JNTCIT/PLC/AAAA1/X1/Y1///////		
+		Type: Unicast
+		Arguments:
+			AAAA1:			ID of the SIOD to be updated when PLC rule triggers
+			X1:				number of local or remote output [0, 1, .. 3]
+			Y1:  				Active/not active [0, 1]
+			AAAA2:(optional) 		ID of the SIOD to be checked in the PLC rule
+			X2:(optional)			number of an IO (outputs (0,1,.. 3) or inputs (4,5,.. 7)) 
+			Y2:(optional)  			State which triggers the PLC rule Active/not active [0, 1]
+			and_or:(optional)		Can be 'and' or 'or'
+			AAAA3:(optional)		ID of the SIOD to be checked in the PLC rule
+			X3:(optional)			number of an IO (outputs (0,1,.. 3) or inputs (4,5,.. 7)) 
+			Y3:(optional)  			State which triggers the PLC rule Active/not active [0, 1]
 
-                if(verbose==2) printf("Rcv: SetIf\n");
+		Description: This command is adding a PLC rule into the local SIOD PLC table. Each SIOD is keeping its local table with PLC rules 
+					 which may be empty or have one or more PLC rules. Logical conjunction(and) and logical disjunction (or) 
+					 of two not necessary local  IOs is supported. Good practice is to have PLC rules having at least one local IO argument. 
+					 Triggering of a rule may happen on a local input change, receiving Set or Put package. If the target SIOD 
+					 has a time range specified then the rule output can be updated only within this time range. 
+					If the local output rule triggers in out of the defined time range a TimeRangeOut package is broadcasted. 
+					If local output is updated the SIOD will broadcast a Put package in the mesh so all SIODs update their GST table. 
+					If a remote output has to be updated a Set packet is send to the target SIOD. That target SIOD may respond with Put or 
+					TimeRangeOut package. If all optional arguments are omitted the PLC rule defined by the triple (AAAA1, X1, Y1) 
+					is removed from PLC table. Maximum of 10 PLC rules is supported.  If SIOD already has 10 rules it will respond with 
+					PLCRes message.
+		*/
+        case PLC:{
+				char *AAAA1, *X1, *Y1, *AAAA2, *X2, *Y2, *and_or, *AAAA3, *X3, *Y3;
+
+                if(verbose==2) printf("Rcv: PLC\n");
+					
+				AAAA1=args[1]; X1=args[2]; Y1=args[3]; AAAA2=args[4], X2=args[5]; Y2=args[6]; and_or=args[7]; AAAA3=args[8]; X3=args[9]; Y3=args[10];	
+
+				if(AAAA2 != '\0'){   //Add a rule
+					char rule[STR_MAX];
+					
+					sprintf(rule, "%s/%s/%s/%s/%s/%s/%s/%s/%s/%s", AAAA1, X1, Y1, AAAA2, X2, Y2, and_or, AAAA3, X3, Y3);
+
+					PLCadd(rule);
+
+				} else{				 //delete a rule
+
+					PLCdel(AAAA1, X1, Y1);
+				}
 
             }
             break;
+		/*
+		Message: /JNTCIT/PLCReq
+		Type: Unicast
+		Arguments:
+		Description: CFG or other node in the mesh can unicast this message if he want to get the set of the PLC rules from a given SIOD.
+		*/
+        case PLCReq:{
+				char PLCstr[MSG_MAX];
+				//Send our PLC table
+
+                if(verbose==2) printf("Rcv: PLCReq\n");
+
+				PLCprint(PLCstr);
+
+				sprintf(msg, "/JNTCIT/PLCRes/%s", PLCstr);
+
+				if(verbose==2) printf("Sent: %s\n", msg);
+
+				unicast(msg);					
+            }
+            break;
+		/*
+		Message: /JNTCIT/PLCRes/AAAA11/X11/Y11/AAAA21/X21/Y21/and_or1/AAAA31/X31/Y31/AAAA12/X12/Y12/AAAA22/X22/Y22/and_or2/AAAA32/X31/Y32 ...
+		Type: Unicast
+		Arguments:
+			AAAA11:		ID of the SIOD to be updated when PLC rule triggers
+			X11:			number of local or remote output [0, 1, .. 3]
+			Y11:  			Active/not active [0, 1]
+			AAAA21 		ID of the SIOD to be checked in the PLC rule
+			X21			number of an IO (outputs (0,1,.. 3) or inputs (4,5,.. 7)) 
+			Y21  			State which triggers the PLC rule Active/not active [0, 1]
+			and_or1		Can be 'and' or 'or'
+			AAAA31		ID of the SIOD to be checked in the PLC rule
+			X31			number of an IO (outputs (0,1,.. 3) or inputs (4,5,.. 7)) 
+			Y31  			State which triggers the PLC rule Active/not active [0, 1]
+			...	
+
+		Description: This message provides information of the PLC rules stored in the SIOD. Maximum of 10 PLC rules per SIOD is supported. 
+		*/
+        case PLCRes:{
+
+                if(verbose==2) printf("Rcv: PLCReq\n");
+				
+				//Do nothing
+            }
+            break;
+		/*
+		Message: /JNTCIT/TimeRange/Date/Time
+
+		Examples:
+	     	Daylight     			
+	     	/JNTCIT/TimeRange//7:00:00-23:59:59
+	     	Night 	
+	     	/JNTCIT/TimeRange//0:0:0-6:59:59
+	     	Saturday	
+	     	/JNTCIT/TimeRange/6/
+	     	Sunday	
+	     	/JNTCIT/TimeRange/0/0:0:0-23:59:59
+	     	Arbitrary single range 	
+	     	/JNTCIT/TimeRange/20July2015/14:00:00-14:59:59
+	     	To clear the time range
+	     	/JNTCIT/TimeRange///			
+		Type: Unicast
+		Arguments:
+			Date:(optional)		Exact date 20July2015 or day in the week index (Monday 1, Sunday 0). Date ranges
+								like 20July2015-25July2015 or 3-5 is also supported. Optional argument. If omitted 
+								any date assumed.
+			Time:(optional)		Time range specification in a format. hh1:mm1:ss1- hh2:mm2:ss2. If the second time 
+								point is smaller then the first one (and the Date doesn't specify a range) it is assumed 
+								that the second time is a sample from the next day. Optional argument, if omitted any 
+								time withing specified Date assumed.    			
+
+		Description: This command is defining a Time Range for the SIOD. This package overwrites previously defined time range. 
+					 A PLC rule can have timing constrain enabled in which case the rule output is adjusted only if withing 
+					 the defined SIOD time range. If the rule triggers but out of time range then TimeRangeOut package 
+					 is broadcasted. Set command is working only if within the time range, otherwise  TimeRangeOut is broadcasted
+		*/
         case TimeRange:{
+
+				char *Date, *Time;
+				char TimeRangeStr[STR_MAX];
 
                 if(verbose==2) printf("Rcv: TimeRange\n");
 
+				Date=args[1]; Time[2];
+				
+				sscanf(TimeRangeStr, "%s/%s", Date, Time);
+
+				ParseTimeRange(TimeRangeStr);
+
             }
             break;
+		/*
+		Message: /JNTCIT/TimeRangeOut/AAAA/Date/Time
+		Type: Broadcast
+		Arguments:
+			AAAA:	ID of the local SIOD
+			Date:		Exact date 20July2015 or day in the week index (Monday 1, Sunday 7). Date ranges
+						like 20July2015-25July2015 or 3-5 is also supported. Optional argument. If omitted 
+						any date assumed.
+			Time:		Time range specification in a format. hh1:mm1:ss1- hh2:mm2:ss2. If the second time 
+						point is smaller then the first one (and the Date doesn't specify a range) it is assumed
+						that the second time is a sample from the next day. Optional argument, if omitted any 
+						range withing specified Date assumed.  			
+
+		Description: This packet is broadcasted each time a local output needs to be adjusted at the moment 
+					 outside of a defined time range (see Set and PLC packages). 
+					 If SIOD doesn't have time range TimeRangeOut is never sent.
+		*/ 
         case TimeRangeOut:{
 				char *AAAA;
 
@@ -1856,13 +2032,12 @@ int ParseTimeRange(char *TimeRangeStr){
 	strcpy(date, args[0]);
 	strcpy(time, args[1]);
 
-	printf("date=%s\n", date);
-	printf("time=%s\n", time);		
-			
+	strcpy(TIMERANGE.Date, date);
+	strcpy(TIMERANGE.Time, time);
+
+	
 	if(date[0]=='\0') {strcpy(date, "0-0"); repetitive_date=1;}//So strptime parsing works
 	if(time[0]=='\0') {strcpy(time, "00:00:00-00:00:00"); repetitive_time=1;} //So strptime parsing works
-    printf("date=%s\n", date);
-    printf("time=%s\n", time); 
 
 	if(strfind(date, "-")){
 		strcpy(date1, date);
@@ -1882,9 +2057,6 @@ int ParseTimeRange(char *TimeRangeStr){
 
 	sprintf(start, "%s %s", date1, time1);
 	sprintf(end, "%s %s", date2, time2);
-
-    printf("start=%s\n", start);
-    printf("end=%s\n", end); 
 
 	if (strptime(start, "%d%b%Y %H:%M:%S", &TIMERANGE.start) == 0){
 		if (strptime(start, "%w %H:%M:%S", &TIMERANGE.start) == 0)
@@ -2013,3 +2185,137 @@ int CheckTimeRange(void){
 
 }
 
+/*
+ * The tripel (AAAA1, X1, Y1) defines a rule in PLC table
+ * If that rule found it will be deleted from PLC table
+ *
+ * Function return 0 if a rule has been added, -1 otherwise
+ */
+int PLCadd(char *rule){
+
+	char rule_[STR_MAX],*AAAA1,*X1,*Y1,*AAAA2,*X2,*Y2,*and_or,*AAAA3,*X3,*Y3;
+	char *PLC_args[10];
+    int PLC_n_args;
+
+	if(PLCT.n>=RULES_MAX){
+
+		printf("Can not add PLC rule, We already have %d rules\n", RULES_MAX);
+		return -1;
+	}
+
+	strcpy(rule_, rule);
+	extract_args(rule_, PLC_args, &PLC_n_args);	
+	AAAA1=PLC_args[0],X1=PLC_args[1],Y1=PLC_args[2],AAAA2=PLC_args[3],X2=PLC_args[4],Y2=PLC_args[5],and_or=PLC_args[6],AAAA3=PLC_args[7],X3=PLC_args[8],Y3=PLC_args[9];
+
+
+	/* Check if rule is valid */
+	if(atoi(AAAA1)<1000 || atoi(AAAA1)>9999){
+		printf("PLCadd: AAAA1 must represent 4 digit number\n");
+        return -1;
+	} 
+    if(atoi(AAAA2)<1000 || atoi(AAAA2)>9999){
+        printf("PLCadd: AAAA2 must represent 4 digit number\n");
+        return -1;
+    }
+    if(atoi(AAAA3)<1000 || atoi(AAAA3)>9999){
+        printf("PLCadd: AAAA3 must represent 4 digit number\n");
+        return -1;
+    }
+    if(atoi(X1)<0 || atoi(X1)>3){
+        printf("PLCadd: X1 should be 0,1,2 or 3\n");
+        return -1;
+    }
+    if(atoi(X2)<0 || atoi(X2)>7){
+        printf("PLCadd: X2 should be in the range [0,1, ... 7]\n");
+        return -1;
+    }
+    if(atoi(X3)<0 || atoi(X3)>7){
+        printf("PLCadd: X3 should be in the range [0,1, ... 7]\n");
+        return -1;
+    }
+    if(strlen(Y1)!=1 || (Y1[0]!='0' && Y1[0]!='1')){
+        printf("PLCadd: Y1 should be 0 or 1\n");
+        return -1;
+    }
+    if(strlen(Y2)!=1 || (Y2[0]!='0' && Y2[0]!='1')){
+        printf("PLCadd: Y2 should be 0 or 1\n");
+        return -1;
+    }
+    if(strlen(Y3)!=1 || (Y3[0]!='0' && Y3[0]!='1')){
+        printf("PLCadd: Y3 should be 0 or 1\n");
+        return -1;
+    }
+    if(strcmp(and_or, "and") && strcmp(and_or, "or")){
+        printf("PLCadd: and_or parameter should be 'and' or 'or' \n");
+        return -1;
+    }
+
+
+	/* Check for rule duplications */
+	if(PLC_n_args>=3)
+		PLCdel(AAAA1, X1, Y1); //So we are sure no rules duplications 
+
+	PLCT.rules[PLCT.n]=malloc(strlen(rule));
+	if(PLCT.rules[PLCT.n] == NULL){
+		printf("PLCadd: Can not allocate memory\n");
+		return -1;
+	}
+
+	strcpy(PLCT.rules[PLCT.n], rule);
+
+	PLCT.n++;
+
+	return 0;
+}
+
+
+/*
+ * The tripel (AAAA1, X1, Y1) defines a rule in PLC table
+ * If that rule	found it will be deleted from PLC table
+ *
+ * Function return 0 if a rule has been deleted, -1 otherwise
+ */
+int PLCdel(char *AAAA1, char *X1, char *Y1){
+	int i, j, PLC_n_nargs;
+	char *PLC_args[10];
+	int PLC_n_args;
+	char rule_[STR_MAX];
+                   
+	for(i=0;i<PLCT.n;i++){
+
+		strcpy(rule_, PLCT.rules[i]);
+		extract_args(rule_, PLC_args, &PLC_n_args);
+
+		if(PLC_n_args >=3 && !strcmp(PLC_args[0], AAAA1) && !strcmp(PLC_args[1], X1) && !strcmp(PLC_args[2], Y1)){
+
+			free(PLCT.rules[i]);     	//delete the rule memory;
+		
+			for(j=i;j<PLCT.n-1;j++){	//Move the pointers so no holes in PLCT.rules array
+			                       
+				PLCT.rules[j] = PLCT.rules[j+1];
+			}
+				
+			PLCT.n--;           	//Reduce rules count
+
+			return 0;
+		}
+	}
+
+	return -1;	
+}
+
+/*
+ * Prints the rules in our PLC table
+ * PLC should be allocated by the caller with a memory big enought
+ */
+void PLCprint(char *PLCstr){
+
+	int i;
+	PLCstr[0]='\0';
+	for(i=0;i<PLCT.n;i++) {
+		strcat(PLCstr, PLCT.rules[i]);
+		strcat(PLCstr, "/");
+	}
+	PLCstr[strlen(PLCstr)-2]='\0';//Remove the final '/'
+
+}
