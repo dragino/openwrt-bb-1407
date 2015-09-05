@@ -66,6 +66,7 @@ struct IPT_nod IPT[SIODS_MAX];  /* Keeps the IP addresses of all SIODs which hav
 struct {
 	int	n;						/* amount of active rules */
 	char *rules[RULES_MAX];		/* Keep the rules in string form */
+	int triggered[RULES_MAX];	/* Notifies if rule has triggered */
 } PLCT;
 
 
@@ -109,10 +110,10 @@ int CheckTimeRange(void);
 int PLCadd(char *rule);
 int PLCdel(char *AAAA1, char *X1, char *Y1);
 void PLCprint(char *);
-
+void PLCexec(void);
 
 enum 		   {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
-	  			RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, \ 
+	  			RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, \
 				AsteriskStatRes, ConfigNTP, Set, PLC, PLCReq, PLCRes, TimeRange, TimeRangeOut, \
 				Get, Put, GSTCheckSumReq, GSTCheckSum, GSTReq, GSTdata, Ping, PingRes};
 char *cmds[26]={"ConfigBatmanReq", "ConfigBatmanRes", "ConfigBatman", "ConfigReq", "ConfigRes", "Config", \
@@ -172,6 +173,7 @@ int main(int argc, char **argv){
 
 	/* We don't have rules in the PLC table ============================== */
 	PLCT.n=0;
+	PLCT.triggered[0]=0;
 
 	/* Check for verbosity argument */
 	if(argc>1) {
@@ -181,7 +183,11 @@ int main(int argc, char **argv){
 		} else if(!strcmp(argv[1], "-vv")){
 			verbose=2;
 			printf("socket_io - rev %s (very verbose)\n", SOCKET_IO_REV);
-		}
+		} else if(!strcmp(argv[1], "-vvv")){
+            verbose=3;
+            printf("socket_io - rev %s (very very verbose)\n", SOCKET_IO_REV);
+        }
+
 	} else
 		printf("socket_io - rev %s\n", SOCKET_IO_REV);
 
@@ -293,7 +299,10 @@ int main(int argc, char **argv){
 			}
 			
 		} else {
-			/* Timeout, expected to happens each 100ms or so */
+			/* Expected to happens each 100ms or so */
+			
+			//Check PLC rule
+			PLCexec();
 		}
 	}
 
@@ -675,7 +684,7 @@ int process_udp(char *datagram){
 				X=args[1]; Y=args[2];
 
 				if(CheckTimeRange()){	
-					res = setgpio(X, Y);
+					res = setgpio(X, Y); //In addition it updates outputs state in GST if successful
 				
 					if(!res){
 						sprintf(msg, "JNTCIT/Put/%s/%s/%s", SIOD_ID, X, Y);
@@ -683,6 +692,8 @@ int process_udp(char *datagram){
 						if(verbose==2) printf("Sent: %s\n", msg);
 
 						broadcast(msg);
+
+
 					}	
 				} else {
 					//Send TimeRangeOut to the caller
@@ -884,7 +895,7 @@ int process_udp(char *datagram){
 
                 X=args[1];
 
-                res = getgpio(X, Y);
+                res = getgpio(X, Y); //In addition if successful the function updates GST
 
                 if(!res){
                     sprintf(msg, "JNTCIT/Put/%s/%s/%s", SIOD_ID, X, Y);
@@ -1682,6 +1693,7 @@ int gpios_init(void){
  *	YYYY:			represent 4 digit binary number.(We have 4 outputs per SIOD) LSB specifies the state of the first IO, 			
  *					MSB of the 4th output. 
  *
+ * The function updates outputs states in GST if successful
  */
 int setgpio(char *X, char *Y){
 
@@ -1710,6 +1722,9 @@ int setgpio(char *X, char *Y){
 
 		if(verbose == 2) printf("Set: OUT%d = %s\n", x, Y);
 
+		//Update GST
+		GST[0].gpios=GPIOs;
+
 	} else if (xlen == 0 && ylen == OUTPUTS_NUM){
 		int i;
 		
@@ -1727,6 +1742,9 @@ int setgpio(char *X, char *Y){
 			}
 		}
 
+        //Update GST
+        GST[0].gpios=GPIOs;
+
 	} else {
 		printf("setgpio: Invalid X and Y\n");
 		return -1;
@@ -1740,8 +1758,10 @@ int setgpio(char *X, char *Y){
  * Get local gpio
  * 
  *   X:(optional)    index of the output [0, 1, .. 8], 
- *					optional argument, if empty the state of all IOs are returned
- *                   results are returned in a strin Y. It must be alocated by the caller 
+ *					 optional argument, if empty the state of all IOs are returned
+ *                   results are returned in a strin Y. It must be alocated by the caller
+ *
+ *   If successful the function updates GST 
  */
 int getgpio(char *X, char *Y){
 
@@ -1761,7 +1781,11 @@ int getgpio(char *X, char *Y){
         read(IOs[x], Y, 2); Y[2]='\0';
 		Y[0]=(Y[0]=='0')?'1':'0'; //Invererse logic for the inputs and feedbacks
 
-		if(verbose==2) printf("Get: IO%d = %s\n", x, Y);
+		if(verbose==3) printf("getgpio: IO%d = %s\n", x, Y);
+		
+		//Update GST
+		GPIOs = (Y[0]-'0')?(GPIOs|(1<<x)):(GPIOs&~(1<<x));
+		GST[0].gpios=GPIOs;
 
     } else if (xlen == 0){
         int i;
@@ -1769,9 +1793,14 @@ int getgpio(char *X, char *Y){
 			read(IOs[i], str, 2); str[2]='\0';
 			Y[INPUTS_NUM+OUTPUTS_NUM-1-i]=(str[0]=='0')?'1':'0'; //Invererse logic for the inputs and feedbacks
 
-			if(verbose==2) printf("Get: IO%d = %s\n", i, (str[0]=='0')?"1":"0");
+			if(verbose==3) printf("getgpio: IO%d = %s\n", i, (str[0]=='0')?"1":"0");
+
+			GPIOs = (str[0]-'0')?(GPIOs|(1<<i)):(GPIOs&~(1<<i));
         }
 		Y[i]='\0';
+
+		//Update GST
+		GST[0].gpios=GPIOs;
 
     } else {
         printf("getgpio: X must be empty or represent a number \n");
@@ -2263,6 +2292,8 @@ int PLCadd(char *rule){
 
 	strcpy(PLCT.rules[PLCT.n], rule);
 
+	PLCT.triggered[PLCT.n]=0;
+
 	PLCT.n++;
 
 	return 0;
@@ -2293,6 +2324,8 @@ int PLCdel(char *AAAA1, char *X1, char *Y1){
 			for(j=i;j<PLCT.n-1;j++){	//Move the pointers so no holes in PLCT.rules array
 			                       
 				PLCT.rules[j] = PLCT.rules[j+1];
+
+				PLCT.triggered[j] = PLCT.triggered[j+1];
 			}
 				
 			PLCT.n--;           	//Reduce rules count
@@ -2318,4 +2351,71 @@ void PLCprint(char *PLCstr){
 	}
 	PLCstr[strlen(PLCstr)-2]='\0';//Remove the final '/'
 
+}
+
+/*
+ * Check the PLC rules and triggers those whos conditions met
+ * Ment to be executed periodically (for example once each 100ms) 
+ * The function reads the local inputs and update the GST
+ */
+void PLCexec(void){
+
+    int i;
+    char rule_[STR_MAX], Y[STR_MAX];
+    char *args[10];
+    int n_args;
+	char *AAAA1, *X1, *Y1, *AAAA2, *X2, *Y2, *and_or, *AAAA3, *X3, *Y3;
+	unsigned char gpios1, gpios2;
+	char msg[MSG_MAX];
+	unsigned long ipaddress;
+
+	getgpio("", Y);//Use to update GST, result in GPIOs
+
+    for(i=0;i<PLCT.n;i++) {
+
+        strcpy(rule_, PLCT.rules[i]);
+        extract_args(rule_, args, &n_args);
+
+		AAAA1=args[1]; X1=args[2]; Y1=args[3]; AAAA2=args[4], X2=args[5]; Y2=args[6]; and_or=args[7]; AAAA3=args[8]; X3=args[9]; Y3=args[10];	
+
+		if(GSTget(GST, atoi(AAAA2), &gpios1)) continue;
+		if(GSTget(GST, atoi(AAAA3), &gpios2)) continue;
+		if((!strcmp(and_or, "or"))?((gpios1&(1<<(X2[0]-'0')) == (Y2[0]-'0')) || (gpios2&(1<<(X3[0]-'0')) == (Y3[0]-'0'))): \
+								   ((gpios1&(1<<(X2[0]-'0')) == (Y2[0]-'0')) && (gpios2&(1<<(X3[0]-'0')) == (Y3[0]-'0')))){
+			//Trigger rule i if it is not already trigered
+			if(PLCT.triggered[i]==0){
+				if(!strcmp(AAAA1, SIOD_ID)){//Have to set a local output
+  
+					setgpio(X1, Y1);
+
+					//broadcast Put message
+					sprintf(msg, "JNTCIT/Put/%s/%s/%s", SIOD_ID, X1, Y1);
+					if(verbose==2) printf("Sent: %s\n", msg);
+					broadcast(msg);				
+	
+				} else {					//remote output need to be set				
+
+					/* AAAA1 -> IPaddress from IPT */
+					if(!IPTget(IPT, atoi(AAAA1), &ipaddress)){
+                    						//Unicast Set to AAAA1
+
+						sprintf(msg, "JNTCIT/Set/%s/%s", X1, Y1);
+
+                    	if(verbose==2) printf("Sent: %s\n", msg);
+
+						cliaddr.sin_addr.s_addr=ipaddress;
+						unicast(msg);					
+					}
+					
+				}
+			
+				PLCT.triggered[i]=1;		
+			}
+
+		} else{
+			//rearm rule i
+			PLCT.triggered[i]=0;
+    	}
+
+	}
 }
