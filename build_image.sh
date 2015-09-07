@@ -45,14 +45,18 @@ shift $(($OPTIND - 1))
 BUILD=$APP-$VERSION
 BUILD_TIME="`date`"
 
+echo ""
+echo "Remove custom files from last build"
+rm -rf $OPENWRT_PATH/files
+
+echo ""
+echo "***Copy General Files***"
+cp -r general_files $OPENWRT_PATH/files
+
 if [ -d files-$APP ];then
+	echo "***Copy files-$APP to default files directory***"
 	echo ""
-	echo "***Find customized $APP files.***"
-	echo "Remove custom files from last build"
-	rm -rf $OPENWRT_PATH/files
-	echo "Copy files-$APP to default files directory"
-	echo ""
-	cp -r files-$APP $OPENWRT_PATH/files
+	cp -r files-$APP/* $OPENWRT_PATH/files/
 else 
 	echo ""
 fi
