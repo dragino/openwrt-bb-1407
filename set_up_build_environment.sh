@@ -67,7 +67,8 @@ echo ""
 
 echo " "
 echo "*** Install OpenWrt BB 14.07 patches"
-#cp bb_1407_patch/566-ath9k_usb_hang_workaround.patch $OPENWRT_PATH/target/linux/ar71xx/patches-3.10/
+cp bb_1407_patch/619-MIPS-ath79-Linino-uart-fix-baudrate.patch $OPENWRT_PATH/target/linux/ar71xx/patches-3.10/
+cp bb_1407_patch/903-ar933x_uart_baud_max_step_fix.patch $OPENWRT_PATH/target/linux/ar71xx/patches-3.10/
 echo " "
 
 #Remove tmp directory
