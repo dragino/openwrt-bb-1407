@@ -117,6 +117,8 @@ int PLCdel(char *AAAA1, char *X1, char *Y1);
 void PLCprint(char *);
 void PLCexec(void);
 unsigned long get_broadcast_IP(void);
+void bcast_init(void);
+
 
 enum 		   {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
 	  			RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, \
@@ -168,7 +170,7 @@ int main(int argc, char **argv){
 	fd_set rset;
 	socklen_t addrlen;
 	struct timeval	timeout;
-	int res, enabled;	
+	int res;	
 
 
 	/* CTR-C handler */
@@ -204,11 +206,11 @@ int main(int argc, char **argv){
 	uciget("siod.siod_id.id", SIOD_ID); 
 
 	/* Our IP address */
-	//TBD which address we will use WAN or WiFi?
 	{
-		char IPAddressWAN[STR_MAX];
-		uciget("network.wan.ipaddr", IPAddressWAN);
-		IPADR = IPaddress_str2num(IPAddressWAN);
+		char IPAddress[STR_MAX];
+		uciget("network.bat.ipaddr", IPAddress);
+		if(IPAddress[0] != '\0')
+			IPADR = IPaddress_str2num(IPAddress);
 	}
 	/* Init. local IOs, outputs set as per the previous relay feedbacks == */
 	gpios_init();
@@ -217,14 +219,8 @@ int main(int argc, char **argv){
 	GSTadd(GST, atoi(SIOD_ID), GPIOs);
 	
 	/* Initialize the broadcasting socket  =============================== */
-    bcast_sockfd=socket(AF_INET,SOCK_DGRAM,0);
-    enabled = 1;
-    setsockopt(bcast_sockfd, SOL_SOCKET, SO_BROADCAST, &enabled, sizeof(enabled));
-	setsockopt(bcast_sockfd, SOL_SOCKET, SO_BINDTODEVICE, "br-bat", IFNAMSIZ-1);
-    bzero(&bcast_servaddr,sizeof(servaddr));
-    bcast_servaddr.sin_family = AF_INET;
-    bcast_servaddr.sin_addr.s_addr=inet_addr("255.255.255.255");
-    bcast_servaddr.sin_port=htons(PORT);	
+	bcast_init();
+
 
 	/* Start UDP Socket server and listening for commands ================ */
 	udpfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -601,6 +597,7 @@ int process_udp(char *datagram){
         case RestartNetworkService:{
 				//We restart network services
 				char *MACAddress;
+				char IPAddress[STR_MAX];
 
 				MACAddress=args[1];				
 
@@ -611,6 +608,12 @@ int process_udp(char *datagram){
 					if(verbose) printf("Restarting the network service\n");
 
 					restartnet();
+
+        			uciget("network.bat.ipaddr", IPAddress); //Update our IPADR
+        			if(IPAddress[0] != '\0')
+            			IPADR = IPaddress_str2num(IPAddress);
+					else
+						IPADR=0;
 				}				
 
             }
@@ -1453,6 +1456,8 @@ void restartnet(void){
 
 	char dummy[STR_MAX];
 
+	close(bcast_sockfd); //Close broadcasting socket
+
     fp=popen("/etc/init.d/network restart 2>&1","r");
 
 	while(fgets(dummy, STR_MAX, fp) != NULL){
@@ -1462,6 +1467,9 @@ void restartnet(void){
 
     if(pclose(fp)==-1)
 		printf("Issue reloading network services");
+
+
+	bcast_init();	//Initialize broadcasting socket again	
 
 }
 
@@ -1526,7 +1534,7 @@ int broadcast(char *msg){
 	}	
 */
 
-	// bcast_servaddr.sin_addr.s_addr = get_broadcast_IP(); //Assigned the br-bat broadcast address
+	//bcast_servaddr.sin_addr.s_addr = get_broadcast_IP(); //Assigned the br-bat broadcast address
 
 	return(sendto(bcast_sockfd,msg,strlen(msg),0, (struct sockaddr *)&bcast_servaddr,sizeof(bcast_servaddr)));
 
@@ -2516,3 +2524,18 @@ unsigned long get_broadcast_IP(void){
 
 }
 
+/*
+    Initalize the broadcasting socket
+*/
+void bcast_init(void){
+	int enabled;
+
+    bcast_sockfd=socket(AF_INET,SOCK_DGRAM,0);
+    enabled = 1;
+    setsockopt(bcast_sockfd, SOL_SOCKET, SO_BROADCAST, &enabled, sizeof(enabled));
+    setsockopt(bcast_sockfd, SOL_SOCKET, SO_BINDTODEVICE, "br-bat", IFNAMSIZ-1);
+    bzero(&bcast_servaddr,sizeof(bcast_servaddr));
+    bcast_servaddr.sin_family = AF_INET;
+    bcast_servaddr.sin_addr.s_addr=inet_addr("255.255.255.255");
+    bcast_servaddr.sin_port=htons(PORT);
+}
