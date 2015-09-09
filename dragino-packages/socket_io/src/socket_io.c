@@ -15,6 +15,10 @@
 #include <unistd.h>
 #include <signal.h>
 
+#include <sys/ioctl.h>
+#include <net/if.h>
+
+
 #define SOCKET_IO_REV   "0.1"
 #define HW_VER "0.1"	
 
@@ -112,6 +116,7 @@ int PLCadd(char *rule);
 int PLCdel(char *AAAA1, char *X1, char *Y1);
 void PLCprint(char *);
 void PLCexec(void);
+unsigned long get_broadcast_IP(void);
 
 enum 		   {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
 	  			RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, \
@@ -215,6 +220,7 @@ int main(int argc, char **argv){
     bcast_sockfd=socket(AF_INET,SOCK_DGRAM,0);
     enabled = 1;
     setsockopt(bcast_sockfd, SOL_SOCKET, SO_BROADCAST, &enabled, sizeof(enabled));
+	setsockopt(bcast_sockfd, SOL_SOCKET, SO_BINDTODEVICE, "br-bat", IFNAMSIZ-1);
     bzero(&bcast_servaddr,sizeof(servaddr));
     bcast_servaddr.sin_family = AF_INET;
     bcast_servaddr.sin_addr.s_addr=inet_addr("255.255.255.255");
@@ -375,13 +381,29 @@ int process_udp(char *datagram){
 		Message: JNTCIT/ConfigBatmanReq
 		Type: Broadcast
 		Arguments: 
-		Description: The CFG broadcasts this packet if he wants to get Batman configuration information for all the SIODs in the mesh. 
-					 Note that the UDP messages are not passing thru if the Batman mesh is not properly setup, so for an initial Batman 
-					 configuration it may be useful to use wired Ethernet switch connected to WAN of the SIODs.
+		Description: The CFG broadcasts this packet if he wants to get Batman configuration information 
+					 for all the SIODs in the mesh. Note that the UDP messages are not passing thru 
+					 if the Batman mesh is not properly setup, so for an initial Batman configuration 
+					 it may be useful to use wired Ethernet switch connected to WAN of the SIODs.		
 		*/
 		case ConfigBatmanReq:{
 
-				if(verbose==2) printf("Rcv: ConfigBatmanReq\n");
+                char MACAddress[STR_MAX], SSID[STR_MAX], Encryption[STR_MAX], Passphrase[STR_MAX], Enable[STR_MAX];
+
+                if(verbose==2) printf("Rcv: ConfigBatmanReq\n");
+
+                MACaddress_num2str(wifiMAC(), MACAddress);
+                uciget("wireless.ah_0.ssid", SSID);
+                uciget("wireless.ah_0.encryption", Encryption);
+                uciget("wireless.ah_0.key", Passphrase);
+                uciget("wireless.ah_0.disabled", Enable);
+				Enable[0]=(Enable[0]=='0')?'1':'0'; //Invert the logic
+
+                sprintf(msg, "JNTCIT/ConfigBatmanRes/%s/%s/%s/%s/%s", MACAddress, SSID, Encryption, Passphrase, Enable);
+
+                if(verbose==2) printf("Sent: %s\n", msg);
+
+                broadcast(msg);
 
 			}
 			break;
@@ -389,50 +411,65 @@ int process_udp(char *datagram){
 		Message: JNTCIT/ConfigBatmanRes/MACAddress/SSID/Encryption/Passphrase/WANbridge
 		Type: Broadcast
 		Arguments:
-			MACAddress:(WiFi)	0a:ba:ff:10:20:30 (WiFi MAC used as reference)
+			MACAddress:			0a:ba:ff:10:20:30 (MAC of br-bat0 used as reference)
 			SSID:				jntcit
 			Encryption:			WPA2
 			Passphrase:			S10D
-			WANbridge:			True, False
 		Description: SIOD is broadcasting this response in the network. To be able to create Batman-adv mesh 
-					 all the WiFi parameters of each SIODs should match. Some of the SIOD are configured 
-					 as mes entry point. For those SIODs  WANbridge should be set to True. 
-					 Note that the UDP messages are not passing thru if the Batman mesh is not properly setup, 
-					 so for an initial Batman configuration it may be useful to use wired Ethernet switch 
-					 connected to Eth0 of the SIODs.
-        */  
+					 all the WiFi parameters of each SIODs should match. All of the SIODs are configured 
+					 as mesh entry point bridge between wan and wlan. Note that the UDP messages are not passing 
+					 thru if the Batman mesh is not properly setup, so for an initial Batman configuration 
+					 it may be useful to use wired Ethernet switch connected to WAN of the SIODs.
+		*/  
         case ConfigBatmanRes:{
-			/* We may fill our table about the available MACaddresses in the mesh */
+			/* Do nothing at the moment  */
 			char *MACaddress = args[1];
 			
 			if(verbose==2) printf("Rcv: ConfigBatmanRes\n");
 
-
             }
             break;
 		/*
-		Message: JNTCIT/ConfigBatman/MACAddress/SSID/Encryption/Passphrase/WANbridge
-	     		 JNTCIT/ConfigBatman//SSID/Encryption/Passphrase/WANbridge 	
-		Type: Broadcast
-		Arguments:
-			MACAddress:(WiFi)(optional)	0a:ba:ff:10:20:30
-			SSID:					jntcit
-			Encryption:				WPA2
-			Passphrase:				S10D
-			WANbridge:				True, False
-		Description: SIOD is broadcasting this response in the network. To be able to create Batman-adv mesh 
-					 all the WiFi parameters of each SIODs should match. Some of the SIOD are configured 
-					 as mesh entry point. For those SIODs  WANbridge should be set to True. 
-					 Note that the UDP messages are not passing thru if the Batman mesh is not properly setup, 
-					 so for an initial Batman configuration it may be useful to use wired Ethernet switch 
-					 connected to Eth0 of the SIODs. Only SIODs with matching MACAddress process the message. 
-					 MACAddress is an optional argument. If it is omitted all receiving SIODs will process 
-					 the message. 		
+	Message: JNTCIT/ConfigBatman/MACAddress/SSID/Encryption/Passphrase/Enable
+	     	 JNTCIT/ConfigBatman//SSID/Encryption/Passphrase/Enable
+	Type: Broadcast
+	Arguments:
+		MACAddress:(WiFi)(optional)	0a:ba:ff:10:20:30
+		SSID:					jntcit
+		Encryption:				WPA2
+		Passphrase:				S10D
+		Enable					1 if enabled, 0 if disabled
+	Description: SIOD is broadcasting this response in the network. To be able to create Batman-adv mesh all the WiFi 
+				 parameters of each SIODs should match. All of the SIOD are configured as mesh entry point, 
+				 bridge between wan and wlan. Note that the UDP messages are not passing thru if the Batman mesh 
+				 is not properly setup, so for an initial Batman configuration it may be useful to use wired Ethernet switch 
+				 connected to WAN of the SIODs. Disconnect the wired switch after enabling the WiFi mesh to avoid 
+				loop in the network. Only SIODs with matching MACAddress process the message. 
+				MACAddress is an optional argument. If it is omitted all receiving SIODs will process the message. 		
 		*/
         case ConfigBatman:{
 
-				if(verbose==2) printf("Rcv: ConfigBatman\n");
+                char *MACAddress, *SSID, *Encryption, *Passphrase, *Enable;
 
+                if(verbose==2) printf("Rcv: ConfigBatman\n");
+
+				MACAddress=args[1]; SSID=args[2]; Encryption=args[3];  Passphrase=args[4]; Enable=args[5];
+
+                if(n_args != 6) {
+                    printf("Wrong format of ConfigBatman message\n");
+                    return -1;
+                }
+
+                if(wifiMAC() == MACaddress_str2num(MACAddress) || MACAddress[0] == '\0') { /* Our MAC address matches or empty MAC, so process the packet */
+                	uciset("wireless.ah_0.ssid", SSID);
+                	uciset("wireless.ah_0.encryption", Encryption);
+                	uciset("wireless.ah_0.key", Passphrase);
+                	uciset("wireless.ah_0.disabled", (Enable[0]=='0')?"1":"0");
+				
+					ucicommit();
+				
+					if(verbose) printf("WiFi Config commited\n");
+				}
             }
             break;
 		/*
@@ -443,26 +480,21 @@ int process_udp(char *datagram){
 		*/
         case ConfigReq:{
 				//We send our network parameters, check ConfigRes
-				char MACAddressWiFi[STR_MAX], MACAddressWAN[STR_MAX], Uptime[STR_MAX], SoftwareVersion[STR_MAX];
-				char IPAddressWiFi[STR_MAX], IPMaskWiFi[STR_MAX], IPAddressWAN[STR_MAX], IPMaskWAN[STR_MAX], Gateway[STR_MAX], DNS1[STR_MAX], DNS2[STR_MAX], DHCP[STR_MAX];
+				char MACAddress[STR_MAX], Uptime[STR_MAX], SoftwareVersion[STR_MAX], IPAddress[STR_MAX], IPMask[STR_MAX], Gateway[STR_MAX], DNS1[STR_MAX], DNS2[STR_MAX], DHCP[STR_MAX];
 
 				if(verbose==2) printf("Rcv: ConfigReq\n");
 
-				MACaddress_num2str(wifiMAC(), MACAddressWiFi);
-				MACaddress_num2str(eth1MAC(), MACAddressWAN);
+				MACaddress_num2str(wifiMAC(), MACAddress);
             	uptime(Uptime);
             	getsoftwarever(SoftwareVersion);
-				uciget("network.bat.ipaddr", IPAddressWiFi);
-            	uciget("network.bat.netmask", IPMaskWiFi);
-            	uciget("network.wan.ipaddr", IPAddressWAN);
-            	uciget("network.wan.netmask", IPMaskWAN);
-            	uciget("network.wan.gateway", Gateway);
-            	uciget("network.wan.dns", DNS1);
+				uciget("network.bat.ipaddr", IPAddress);
+            	uciget("network.bat.netmask", IPMask);
+            	uciget("network.bat.gateway", Gateway);
+            	uciget("network.bat.dns", DNS1);
 				DNS2[0]='\0'; //Don't support for now
 				uciget("network.bat.proto", DHCP);
 				
-				sprintf(msg, "JNTCIT/ConfigRes/%s/%s/%s/SIOD/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s", MACAddressWiFi, MACAddressWAN, Uptime, HW_VER, SoftwareVersion, SIOD_ID, \
-						IPAddressWiFi, IPMaskWiFi, IPAddressWAN, IPMaskWAN, Gateway, DNS1, DNS2, DHCP);
+				sprintf(msg, "JNTCIT/ConfigRes/%s/%s/SIOD/%s/%s/%s/%s/%s/%s/%s/%s/%s", MACAddress, Uptime, HW_VER, SoftwareVersion, SIOD_ID, IPAddress, IPMask, Gateway, DNS1, DNS2, DHCP);
 
 				if(verbose==2) printf("Sent: %s\n", msg);
 
@@ -471,35 +503,27 @@ int process_udp(char *datagram){
             }
             break;
 		/*
+		Message: JNTCIT/ConfigRes/MACAddress/UpTime/UnitType/HardwareVersion/SoftwareVersion/AAAA/IPAddress/IPMask/Gateway/DNS1/DNS2/DHCP
+		JNTCIT/ConfigRes/MACAddress/UpTime/UnitType/HardwareVersion/SoftwareVersion/////////
+		Type: Broadcast
 		Arguments: some of the arguments are optional. In this case back slash / still signifies the parameter place holder
-			MACAddressWiFi:		0a:ba:ff:10:20:30
-			MACAddressWAN:		0a:cc:10:bb:ab:00
+			MACAddress:			0a:ba:ff:10:20:30
 			Uptime: (Linux in seconds)	123.43		
 			UnitType: 			SIOD, AsteriskPC, Intercom
 			HardwareVersion: 		0.1
 			SoftwareVersion: 		0.5(it is convenient to get this from /etc/banner)
 			AAAA: (optional)		SIOD ID Only if the UnitType is SIOD
-			IPAddressWiFi:(optional)	10.10.0.55
-			IPMaskWiFi:(optional)		255.255.255.0
-			IPAddressWAN:(optional)	20.20.0.10
-			IPMaskWAN:(optional)	255.255.255.0
+			IPAddress:(optional)		10.10.0.55
+			IPMask:(optional)		255.255.255.0
 			Gateway:(optional)		10.10.0.1
 			DNS1:(optional)		8.8.8.8
 			DNS2:(optional)		4.4.4.4
 			DHCP:(optional)		static, dhcp
-	
-		Description: All devices in the network except the configuration PC broadcast this ConfigRes message 
-					 in response to the Config message. This way all the nodes (not only the CFG PC) can fill 
-					 their table with the available nodes in the mesh and their configuration. 
-					 SIODs have WiFi and WAN Ethernet port. Most of the SIOD are using only their WiFi interface 
-					 to participate in the Batman-adv mesh, and they don't need WAN port configured. 
-					 Some of the SIOD however are using WAN as an entry point in the mesh, and for those SIODs 
-					 we have to provide the WAN IP parameters as well. It is possible to use the SIOD in the 
-					 wire configuration. In that case on WAN IP parameters are defined. Note that both MACAddressWiFi 
-					 and MACAddressWAN parameters are mandatory. Those CFG are using to create the Config packages.  
-					 Optionally this message can be send unsolicited on the initial power up of the SIOD. 
-					 If the SIOD is still not configured then  IPAddressWiFi, IPMaskWiFi, IPAddressWAN,  
-					 IPMaskWAN, Gateway, DNS1,DNS2 and DHCP are empty.
+		Description: All devices in the network except the configuration PC broadcast this ConfigRes message in response to the Config message. 
+					 This way all the nodes (not only the CFG PC) can fill their table with the available nodes in the mesh and their configuration. 
+					 SIODs have WiFi and WAN Ethernet port which ar bridged into br-bat interface. br-bat is the interface which is actually configured.  
+					 Optionally this message can be send unsolicited on the initial power up of the SIOD. If the SIOD is still not configured then  
+					 IPAddress,  IPMask, Gateway, DNS1,DNS2 and DHCP are empty
 		*/
         case ConfigRes:{
 				//Only update our IPT at the moment		
@@ -507,7 +531,7 @@ int process_udp(char *datagram){
 
 				if(verbose==2) printf("Rcv: ConfigRes\n");
 
-				AAAA=args[7];
+				AAAA=args[6];
 				if(AAAA[0]!='\0'){
                 	/* add the message source IPaddress to our IPT */
                 	IPTset(IPT, atoi(AAAA), cliaddr.sin_addr.s_addr);	
@@ -529,18 +553,15 @@ int process_udp(char *datagram){
 			DNS2:(optional)	4.4.4.4
 			DHCP:			static, dhcp
 	
-		Description: CFG sends this packet and only the SIOD device with matching MACAddress (both WiFi and WAN addresses are checked) 
-					 will process it.  SIOD will update its network configuration file and will restart its network services 
-					 so the new settings applies. SIODs have WiFi and WAN Ethernet port. Most of the SIOD are using only their 
-					 WiFi interface to participate in the Batman-adv mesh, and they don't need WAN port configured. 
-					 Some of the SIOD however are using WAN as an entry point in the mesh, and for those SIODs we have to provide 
-					 the WAN IP parameters as well. It is possible to use the SIOD in the wire configuration. In that case on WAN IP 
-					 parameters are defined.		
+		Description: CFG sends this packet and only the SIOD device with matching MACAddress will process it. 
+					 SIOD will update its network configuration file. In order to apply the new settings 
+					 RestartNetworkService message is used. SIODs have WiFi and WAN Ethernet port which are 
+					 bridged into br-bat interface. br-bat is the interface which is actually configured 
+					 by this command.
 		*/
         case Config:{
 				//We set our network parameters
 				char *MACAddress, *IPAddress, *IPMask, *Gateway, *DNS1, *DNS2, *DHCP;
-				char MACAddressWAN[STR_MAX],  MACAddressWiFi[STR_MAX];
 				unsigned long long MACAddress_num;
 
 				if(n_args != 8) {
@@ -550,31 +571,18 @@ int process_udp(char *datagram){
 				MACAddress=args[1]; IPAddress=args[2]; IPMask=args[3]; Gateway=args[4]; DNS1=args[5]; DNS2=args[6]; DHCP=args[7];
 
 				MACAddress_num = MACaddress_str2num(MACAddress);
-				if(eth1MAC() == MACAddress_num){ /* We set WAN parameters*/
-
-					uciset("network.wan.ipaddr", IPAddress);
-					uciset("network.wan.netmask", IPMask);
-					uciset("network.wan.gateway", Gateway);
-					uciset("network.wan.dns", DNS1);
-					//uciset("network.wan.dns", DNS2); ignore for now
-					uciset("network.wan.proto", DHCP);
-
-					ucicommit();
-
-					if(verbose) printf("WAN Config commited\n");
-
-				} else if(wifiMAC() == MACAddress_num){ /* We set WiFi parameters*/
+				if(wifiMAC() == MACAddress_num){ /* We set  parameters*/
 
                     uciset("network.bat.ipaddr", IPAddress);
                     uciset("network.bat.netmask", IPMask);
-                    //uciset("network.bat.gateway", Gateway);	Should we ignore Gateway and DNS for the WiFi ?
-                    //uciset("network.bat.dns", DNS1);
+                    uciset("network.bat.gateway", Gateway);
+                    uciset("network.bat.dns", DNS1);
                     //uciset("network.bat.dns", DNS2); ignore for now
                     uciset("network.bat.proto", DHCP);
 
 					ucicommit();
 			
-					if(verbose) printf("WiFi Config commited\n");
+					if(verbose) printf("bat Config commited\n");
 
 				}
 
@@ -593,24 +601,14 @@ int process_udp(char *datagram){
         case RestartNetworkService:{
 				//We restart network services
 				char *MACAddress;
-				unsigned long long MACAddress_num;
 
 				MACAddress=args[1];				
 
 				if(verbose==2) printf("Rcv: RestartNetworkService\n");
 				
-				if (*MACAddress == '\0'){
-					if(verbose) printf("Restart the network service\n");
-	
-					restartnet(); /* The optional MAC address is omitted so we restart our network service */
-					
-					break;
-				}
+				if(*MACAddress == '\0' || wifiMAC() == MACaddress_str2num(MACAddress)) {
 
-				MACAddress_num = MACaddress_str2num(MACAddress);
-				if(eth1MAC() == MACAddress_num || wifiMAC() == MACAddress_num) {
-
-					if(verbose) printf("Restart the network service\n");
+					if(verbose) printf("Restarting the network service\n");
 
 					restartnet();
 				}				
@@ -1322,7 +1320,7 @@ unsigned long long wifiMAC(void){
     int fd;
     char mac[18];
 
-    fd = open("/sys/class/net/wlan0/address", O_RDONLY);
+    fd = open("/sys/class/net/br-bat/address", O_RDONLY);
 
     read(fd, mac, 18);
 
@@ -1354,6 +1352,7 @@ int uciget(const char *param, char *value){
 	if(value[len-1]=='\r' || value[len-1]=='\n') value[len-1]='\0';
 
 	if(ret==NULL){
+		value[0]=' ';	//return a space string so we can still create valid UDP message 
 		value[0]='\0';
 		return -1;
 	}else
@@ -1454,7 +1453,7 @@ void restartnet(void){
 
 	char dummy[STR_MAX];
 
-    fp=popen("/etc/init.d/network reload 2>&1","r");
+    fp=popen("/etc/init.d/network restart 2>&1","r");
 
 	while(fgets(dummy, STR_MAX, fp) != NULL){
 		printf("%s\n", dummy);
@@ -1515,7 +1514,20 @@ int getsoftwarever(char *ver){
  * Broadcast UDP message
  */
 int broadcast(char *msg){
-	
+/*
+	unsigned long broadcast_ip;
+	broadcast_ip=get_broadcast_IP();
+	if(broadcast_ip){
+		bcast_servaddr.sin_addr.s_addr = broadcast_ip; //Assigned the br-bat broadcast address
+	} else {
+		bcast_servaddr.sin_addr.s_addr= cliaddr.sin_addr.s_addr | 0x000000ff; //Get address of the latest package and make it x.x.x.255
+
+		if(verbose==2) printf("broadcast ip = 0x%x\n", bcast_servaddr.sin_addr.s_addr);
+	}	
+*/
+
+	// bcast_servaddr.sin_addr.s_addr = get_broadcast_IP(); //Assigned the br-bat broadcast address
+
 	return(sendto(bcast_sockfd,msg,strlen(msg),0, (struct sockaddr *)&bcast_servaddr,sizeof(bcast_servaddr)));
 
 }
@@ -2465,3 +2477,42 @@ void PLCexec(void){
 
 	}
 }
+
+/*
+	Calculates the broadcast IP = ip | ~ netmask
+*/
+unsigned long get_broadcast_IP(void){
+
+	int fd;
+ 	struct ifreq ifr;
+	unsigned long ip, mask;
+
+ 	fd = socket(AF_INET, SOCK_DGRAM, 0);
+
+	ifr.ifr_addr.sa_family = AF_INET;
+
+	strncpy(ifr.ifr_name, "br-bat", 7);
+	if(ioctl(fd, SIOCGIFADDR, &ifr)==-1){
+		printf("ioctl(SIOCGIFADD) issue\n");
+		return 0xffffffff;
+	}
+	ip=((struct sockaddr_in *)&(ifr.ifr_addr))->sin_addr.s_addr;
+
+	
+	memset(&ifr, 0, sizeof(ifr));
+	strncpy(ifr.ifr_name, "br-bat", 7);	
+	if(ioctl(fd, SIOCGIFNETMASK, &ifr)==-1){
+		printf("ioctl(SIOCGIFNETMASK) issue\n");
+		return 0xffffffff;
+	}
+	mask=((struct sockaddr_in *)&(ifr.ifr_netmask))->sin_addr.s_addr;
+
+
+	if(verbose==2) printf("broadcast ip=0x%x\n",ip | ~mask);
+
+	close(fd);
+
+ 	return (ip | ~mask);
+
+}
+
