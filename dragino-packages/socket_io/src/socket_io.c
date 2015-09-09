@@ -102,7 +102,8 @@ void GSTdel(struct GST_nod *gst, unsigned short siod_id);
 int GSTget(struct GST_nod *gst, unsigned short siod_id, unsigned char *gpios);
 int GSTset(struct GST_nod *gst, unsigned short siod_id, unsigned char gpios);
 void GSTprint(struct GST_nod *gst, char *str);
-void byte2binary(int n, char *str);
+void byte2binarystr(int n, char *str);
+unsigned char binarystr2byte(char *str);
 int IPTget(struct IPT_nod *ipt, unsigned short siod_id, unsigned long *IPaddress);
 void IPTset(struct IPT_nod *gst, unsigned short siod_id, unsigned long IPaddress);
 int ParseTimeRange(char *TimeRangeStr);
@@ -170,6 +171,9 @@ int main(int argc, char **argv){
 
 
 	/* Splash ============================================================ */
+
+	/* No timing restrictions for the outputs ============================ */
+	ParseTimeRange("/");
 
 	/* We don't have rules in the PLC table ============================== */
 	PLCT.n=0;
@@ -243,7 +247,7 @@ int main(int argc, char **argv){
 	/* broadcasst Put message so all nodes syncronize their GST ========== */
 	{
 		char msg[STR_MAX], Y[9];
-		byte2binary(GPIOs, Y);
+		byte2binarystr(GPIOs, Y);
 		sprintf(msg, "JNTCIT/Put/%s//%s", SIOD_ID, Y);
     	if(verbose==2) printf("Sent: %s\n", msg);
     	broadcast(msg);	
@@ -345,7 +349,7 @@ int process_udp(char *datagram){
 
 	/* We process only datagrams starting with JNTCIT */
 	if ((strlen(datagram)<7) || strncmp(datagram, "JNTCIT/", 7)){
-		if(verbose) printf("unrelated datagram => %s\n", datagram);
+		if(verbose==2) printf("Unrelated datagram => %s\n", datagram);
 		return 0;
 	} else
 		datagram = datagram + 7;
@@ -357,10 +361,12 @@ int process_udp(char *datagram){
 	/* extract arguments */
 	extract_args(datagram, args, &n_args);
 
-	if(verbose==2) {
+	if(verbose==3) {
 		int i;
+		printf("UDP arguments: ");
 		for(i=0;i<n_args;i++) 
-			printf("%s\n", args[i]);
+			printf("%s ", args[i]);
+		printf("\n");
 	}
 
 
@@ -446,14 +452,14 @@ int process_udp(char *datagram){
 				MACaddress_num2str(eth1MAC(), MACAddressWAN);
             	uptime(Uptime);
             	getsoftwarever(SoftwareVersion);
-				uciget("network.mesh_0.ipaddr", IPAddressWiFi);
-            	uciget("network.mesh_0.netmask", IPMaskWiFi);
+				uciget("network.bat.ipaddr", IPAddressWiFi);
+            	uciget("network.bat.netmask", IPMaskWiFi);
             	uciget("network.wan.ipaddr", IPAddressWAN);
             	uciget("network.wan.netmask", IPMaskWAN);
-            	uciget("network.mesh_0.gateway", Gateway);
-            	uciget("network.mesh_0.dns", DNS1);
+            	uciget("network.wan.gateway", Gateway);
+            	uciget("network.wan.dns", DNS1);
 				DNS2[0]='\0'; //Don't support for now
-				uciget("network.mesh_0.proto", DHCP);
+				uciget("network.bat.proto", DHCP);
 				
 				sprintf(msg, "JNTCIT/ConfigRes/%s/%s/%s/SIOD/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s", MACAddressWiFi, MACAddressWAN, Uptime, HW_VER, SoftwareVersion, SIOD_ID, \
 						IPAddressWiFi, IPMaskWiFi, IPAddressWAN, IPMaskWAN, Gateway, DNS1, DNS2, DHCP);
@@ -559,12 +565,12 @@ int process_udp(char *datagram){
 
 				} else if(wifiMAC() == MACAddress_num){ /* We set WiFi parameters*/
 
-                    uciset("network.mesh_0.ipaddr", IPAddress);
-                    uciset("network.mesh_0.netmask", IPMask);
-                    uciset("network.mesh_0.gateway", Gateway);
-                    uciset("network.mesh_o.dns", DNS1);
-                    //uciset("network.mesh_0.dns", DNS2); ignore for now
-                    uciset("network.mesh_0.proto", DHCP);
+                    uciset("network.bat.ipaddr", IPAddress);
+                    uciset("network.bat.netmask", IPMask);
+                    //uciset("network.bat.gateway", Gateway);	Should we ignore Gateway and DNS for the WiFi ?
+                    //uciset("network.bat.dns", DNS1);
+                    //uciset("network.bat.dns", DNS2); ignore for now
+                    uciset("network.bat.proto", DHCP);
 
 					ucicommit();
 			
@@ -593,18 +599,20 @@ int process_udp(char *datagram){
 
 				if(verbose==2) printf("Rcv: RestartNetworkService\n");
 				
-				if (*MACAddress == '\0'){	
+				if (*MACAddress == '\0'){
+					if(verbose) printf("Restart the network service\n");
+	
 					restartnet(); /* The optional MAC address is omitted so we restart our network service */
 					
-					if(verbose) printf("Restart the network service\n");
 					break;
 				}
 
 				MACAddress_num = MACaddress_str2num(MACAddress);
 				if(eth1MAC() == MACAddress_num || wifiMAC() == MACAddress_num) {
-					restartnet();
 
 					if(verbose) printf("Restart the network service\n");
+
+					restartnet();
 				}				
 
             }
@@ -742,7 +750,7 @@ int process_udp(char *datagram){
 					
 				AAAA1=args[1]; X1=args[2]; Y1=args[3]; AAAA2=args[4], X2=args[5]; Y2=args[6]; and_or=args[7]; AAAA3=args[8]; X3=args[9]; Y3=args[10];	
 
-				if(AAAA2 != '\0'){   //Add a rule
+				if(AAAA2[0] != '\0'){   //Add a rule
 					char rule[STR_MAX];
 					
 					sprintf(rule, "%s/%s/%s/%s/%s/%s/%s/%s/%s/%s", AAAA1, X1, Y1, AAAA2, X2, Y2, and_or, AAAA3, X3, Y3);
@@ -842,7 +850,7 @@ int process_udp(char *datagram){
 
 				Date=args[1]; Time[2];
 				
-				sscanf(TimeRangeStr, "%s/%s", Date, Time);
+				sprintf(TimeRangeStr, "%s/%s", Date, Time);
 
 				ParseTimeRange(TimeRangeStr);
 
@@ -902,7 +910,7 @@ int process_udp(char *datagram){
 
                     if(verbose==2) printf("Sent: %s\n", msg);
 
-                    unicast(msg);
+					unicast(msg);
                 }
             }
             break;        
@@ -940,7 +948,7 @@ int process_udp(char *datagram){
 				/* add the message source IPaddress to our IPT */
                 IPTset(IPT, atoi(AAAA), cliaddr.sin_addr.s_addr);
 
-				if(X[0] == '\0'){ // Empty X
+				if(X[0] != '\0'){ // Empty X
 					res=GSTget(GST, atoi(AAAA), &gpios);					
 					if(res == -1){
 						printf("/JNTCIT/Put/AAAA/X/Y message ignored as we don't have SIOD_ID=%s in the GST\n", AAAA);
@@ -950,7 +958,7 @@ int process_udp(char *datagram){
 					GSTset(GST, atoi(AAAA), (Y[0]=='1')?(gpios|(1<<atoi(X))):(gpios&~(1<<atoi(X))));
 
 				} else {
-					GSTadd(GST, atoi(AAAA), atoi(Y));
+					GSTadd(GST, atoi(AAAA), binarystr2byte(Y));
 				}	
 			
             }
@@ -1090,10 +1098,7 @@ int process_udp(char *datagram){
 				AAAA = args[1];
 
 				if(AAAA[0]=='\0' || !strcmp(AAAA, SIOD_ID)) { //AAAA is empty or our SIOD_ID matches so we we need to respond
-					//TBD needs to add logic to determine if IPAddressWAN is required
-					//For now just return the WiFi address
-					uciget("network.mesh_0.ipaddr", IPAddressWiFi);
-					sprintf(msg, "JNTCIT/PingRes/%s", IPAddressWiFi);
+					sprintf(msg, "JNTCIT/PingRes/%s", SIOD_ID);
 					if(verbose==2) printf("Sent: %s\n", msg);
 					unicast(msg);											
 				}
@@ -1521,7 +1526,15 @@ int broadcast(char *msg){
  */
 int unicast(char *msg){
 
-    return(sendto(udpfd,msg,strlen(msg),0, (struct sockaddr *)&cliaddr,sizeof(cliaddr)));
+	if(verbose==3) {
+		char IPaddress_str[STR_MAX];
+		IPaddress_num2str(cliaddr.sin_addr.s_addr, IPaddress_str);
+		printf("unicast to %s\n", IPaddress_str);
+	}
+	
+	cliaddr.sin_port = htons(PORT); // Make sure we send on proper port
+
+	return(sendto(udpfd,msg,strlen(msg),0, (struct sockaddr *)&cliaddr,sizeof(cliaddr)));
 }
 
 /*
@@ -1716,7 +1729,7 @@ int setgpio(char *X, char *Y){
     
     	write(fd_rel0, (x>1)?"1":"0", 1); write(fd_rel1, (x%2)?"1":"0", 1);
     	write(fd_s_r, Y, 1);
-    	write(fd_pulse, "0", 1); usleep(200000L); write(fd_pulse, "1", 1);
+    	write(fd_pulse, "0", 1); usleep(100000L); write(fd_pulse, "1", 1);
 		      
 		GPIOs = (Y[0]-'0')?(GPIOs|(1<<x)):(GPIOs&~(1<<x));
 
@@ -1734,7 +1747,7 @@ int setgpio(char *X, char *Y){
 					
         		write(fd_rel0, (i>1)?"1":"0", 1); write(fd_rel1, (i%2)?"1":"0", 1);
         		write(fd_s_r, (Y[OUTPUTS_NUM-1-i]-'0')?"1":"0", 1);
-        		write(fd_pulse, "0", 1); usleep(200000L); write(fd_pulse, "1", 1);
+        		write(fd_pulse, "0", 1); usleep(100000L); write(fd_pulse, "1", 1);
 
 				GPIOs = (Y[OUTPUTS_NUM-1-i]-'0')?(GPIOs|(1<<i)):(GPIOs&~(1<<i));
 
@@ -1778,24 +1791,26 @@ int getgpio(char *X, char *Y){
 		}
 
         snprintf(str, STR_MAX, "/sys/class/gpio/gpio%d/value", IOs[x]);
+		lseek(IOs[x], 0, SEEK_SET);
         read(IOs[x], Y, 2); Y[2]='\0';
-		Y[0]=(Y[0]=='0')?'1':'0'; //Invererse logic for the inputs and feedbacks
+		Y[0]=(Y[0]=='0')?'1':'0'; Y[1]='\0';	//Invererse logic for the inputs and feedbacks
 
 		if(verbose==3) printf("getgpio: IO%d = %s\n", x, Y);
 		
 		//Update GST
-		GPIOs = (Y[0]-'0')?(GPIOs|(1<<x)):(GPIOs&~(1<<x));
+		GPIOs = (Y[0]-'0')?(GPIOs&~(1<<x)):(GPIOs|(1<<x));
 		GST[0].gpios=GPIOs;
 
     } else if (xlen == 0){
         int i;
         for(i=0;i<INPUTS_NUM+OUTPUTS_NUM;i++){
+			lseek(IOs[i], 0, SEEK_SET);
 			read(IOs[i], str, 2); str[2]='\0';
 			Y[INPUTS_NUM+OUTPUTS_NUM-1-i]=(str[0]=='0')?'1':'0'; //Invererse logic for the inputs and feedbacks
 
 			if(verbose==3) printf("getgpio: IO%d = %s\n", i, (str[0]=='0')?"1":"0");
 
-			GPIOs = (str[0]-'0')?(GPIOs|(1<<i)):(GPIOs&~(1<<i));
+			GPIOs = (str[0]-'0')?(GPIOs&~(1<<i)):(GPIOs|(1<<i));
         }
 		Y[i]='\0';
 
@@ -1939,12 +1954,13 @@ int GSTset(struct GST_nod *gst, unsigned short siod_id, unsigned char gpios){
 void GSTprint(struct GST_nod *gst, char *str){
 
     int i;
-	char gpios[9];	
+	char gpios[9], item[STR_MAX];	
 
 	str[0]='\0';i=0;
     while((gst+i)->siod_id){
-        byte2binary((gst+i)->gpios, gpios);
-		sprintf(str, "%d,%s;", (gst+i)->siod_id, gpios);
+        byte2binarystr((gst+i)->gpios, gpios);
+		sprintf(item, "%d,%s;", (gst+i)->siod_id, gpios);
+		strcat(str, item);
 		i++;
     }
 }
@@ -1953,7 +1969,7 @@ void GSTprint(struct GST_nod *gst, char *str){
  * Convert byte to str representing 8 digit binary equivalent
  * str should be allocated by the caller
  */
-void byte2binary(int n, char *str){
+void byte2binarystr(int n, char *str){
 
    int c, d, i;
  
@@ -1965,6 +1981,27 @@ void byte2binary(int n, char *str){
    }
 
    *(str+i) = '\0';
+}
+
+/*
+ * Convert str representing 8 digit binary equivalent into a byte
+ */
+unsigned char binarystr2byte(char *str){
+	int i;	
+	unsigned char byte;	
+
+	if(strlen(str) != 8 ){
+		printf("binarystr2byte: str shoould be 8 chars long\n");
+		return -1;
+	}
+
+	byte=0;
+	for(i=0;i<8;i++){
+		if(str[7-i]-'0') byte |= (1<<i);
+	}
+	
+	return byte;
+
 }
 
 /*
@@ -2149,8 +2186,10 @@ int CheckTimeRange(void){
 		end_.tm_year = now_.tm_year;
 		end_.tm_mon = now_.tm_mon;
 
-		start=mktime(&start_);
-		end=mktime(&end_);
+		if(TIMERANGE.start.tm_min != -1 ){
+			start=mktime(&start_);
+			end=mktime(&end_);
+		}
 
 	}
     
@@ -2189,7 +2228,7 @@ int CheckTimeRange(void){
 
 		if(TIMERANGE.end.tm_wday >= TIMERANGE.start.tm_wday){
 
-			if(verbose==2) printf("CheckTimeRange: Interval spana a single week (sun, mon .. sat)\n");
+			if(verbose==2) printf("CheckTimeRange: Interval span a single week (sun, mon .. sat)\n");
 
 			end = end+(TIMERANGE.end.tm_wday-now_.tm_wday)*SECSINDAY;
 
@@ -2207,6 +2246,8 @@ int CheckTimeRange(void){
 
 
 		if(verbose==2) printf("CheckTimeRange: concrete range\n");
+
+		if(verbose==3) printf("start=%d, end=%d, now=%d\n", start, end, now);
 
 		return (now>=start && now<=end)?1:0;
 
@@ -2349,7 +2390,7 @@ void PLCprint(char *PLCstr){
 		strcat(PLCstr, PLCT.rules[i]);
 		strcat(PLCstr, "/");
 	}
-	PLCstr[strlen(PLCstr)-2]='\0';//Remove the final '/'
+	PLCstr[strlen(PLCstr)-1]='\0';//Remove the final '/'
 
 }
 
@@ -2376,12 +2417,17 @@ void PLCexec(void){
         strcpy(rule_, PLCT.rules[i]);
         extract_args(rule_, args, &n_args);
 
-		AAAA1=args[1]; X1=args[2]; Y1=args[3]; AAAA2=args[4], X2=args[5]; Y2=args[6]; and_or=args[7]; AAAA3=args[8]; X3=args[9]; Y3=args[10];	
+		AAAA1=args[0]; X1=args[1]; Y1=args[2]; AAAA2=args[3], X2=args[4]; Y2=args[5]; and_or=args[6]; AAAA3=args[7]; X3=args[8]; Y3=args[9];	
+
+		if(verbose==3) printf("rule[%d]: %s/%s/%s/%s/%s/%s/%s/%s/%s/%s\n", i, AAAA1,X1,Y1,AAAA2,X2,Y2,and_or,AAAA3,X3,Y3);
 
 		if(GSTget(GST, atoi(AAAA2), &gpios1)) continue;
 		if(GSTget(GST, atoi(AAAA3), &gpios2)) continue;
-		if((!strcmp(and_or, "or"))?((gpios1&(1<<(X2[0]-'0')) == (Y2[0]-'0')) || (gpios2&(1<<(X3[0]-'0')) == (Y3[0]-'0'))): \
-								   ((gpios1&(1<<(X2[0]-'0')) == (Y2[0]-'0')) && (gpios2&(1<<(X3[0]-'0')) == (Y3[0]-'0')))){
+
+		if(verbose==3) printf("gpios1=0x%x, gpios2=0x%x\n", gpios1, gpios2);
+
+		if((!strcmp(and_or, "or"))?((((gpios1>>(X2[0]-'0'))&1) == (Y2[0]-'0')) || (((gpios2>>(X3[0]-'0'))&1) == (Y3[0]-'0'))): \
+								   ((((gpios1>>(X2[0]-'0'))&1) == (Y2[0]-'0')) && (((gpios2>>(X3[0]-'0'))&1) == (Y3[0]-'0')))){
 			//Trigger rule i if it is not already trigered
 			if(PLCT.triggered[i]==0){
 				if(!strcmp(AAAA1, SIOD_ID)){//Have to set a local output
