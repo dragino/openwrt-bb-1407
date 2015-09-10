@@ -116,7 +116,6 @@ int PLCadd(char *rule);
 int PLCdel(char *AAAA1, char *X1, char *Y1);
 void PLCprint(char *);
 void PLCexec(void);
-unsigned long get_broadcast_IP(void);
 void bcast_init(void);
 
 
@@ -174,7 +173,7 @@ int main(int argc, char **argv){
 
 
 	/* CTR-C handler */
-	signal(SIGINT, intHandler);
+	//signal(SIGINT, intHandler);
 
 
 	/* Splash ============================================================ */
@@ -319,6 +318,7 @@ int main(int argc, char **argv){
 /* 
  * Closes gpio descriptors on CTR-C 
  */
+/*
 void intHandler(int dummy) {
 	int i;
 
@@ -330,12 +330,12 @@ void intHandler(int dummy) {
 
 	close(udpfd); close(bcast_sockfd);
 	
-	/* free PLC rules memory */
+	// free PLC rules memory 
 	for(i=0; i<PLCT.n; i++) free(PLCT.rules[i]);	
 
 	exit(0);
 }
-
+*/
 
 
 /* 
@@ -1522,19 +1522,6 @@ int getsoftwarever(char *ver){
  * Broadcast UDP message
  */
 int broadcast(char *msg){
-/*
-	unsigned long broadcast_ip;
-	broadcast_ip=get_broadcast_IP();
-	if(broadcast_ip){
-		bcast_servaddr.sin_addr.s_addr = broadcast_ip; //Assigned the br-bat broadcast address
-	} else {
-		bcast_servaddr.sin_addr.s_addr= cliaddr.sin_addr.s_addr | 0x000000ff; //Get address of the latest package and make it x.x.x.255
-
-		if(verbose==2) printf("broadcast ip = 0x%x\n", bcast_servaddr.sin_addr.s_addr);
-	}	
-*/
-
-	//bcast_servaddr.sin_addr.s_addr = get_broadcast_IP(); //Assigned the br-bat broadcast address
 
 	return(sendto(bcast_sockfd,msg,strlen(msg),0, (struct sockaddr *)&bcast_servaddr,sizeof(bcast_servaddr)));
 
@@ -2484,44 +2471,6 @@ void PLCexec(void){
     	}
 
 	}
-}
-
-/*
-	Calculates the broadcast IP = ip | ~ netmask
-*/
-unsigned long get_broadcast_IP(void){
-
-	int fd;
- 	struct ifreq ifr;
-	unsigned long ip, mask;
-
- 	fd = socket(AF_INET, SOCK_DGRAM, 0);
-
-	ifr.ifr_addr.sa_family = AF_INET;
-
-	strncpy(ifr.ifr_name, "br-bat", 7);
-	if(ioctl(fd, SIOCGIFADDR, &ifr)==-1){
-		printf("ioctl(SIOCGIFADD) issue\n");
-		return 0xffffffff;
-	}
-	ip=((struct sockaddr_in *)&(ifr.ifr_addr))->sin_addr.s_addr;
-
-	
-	memset(&ifr, 0, sizeof(ifr));
-	strncpy(ifr.ifr_name, "br-bat", 7);	
-	if(ioctl(fd, SIOCGIFNETMASK, &ifr)==-1){
-		printf("ioctl(SIOCGIFNETMASK) issue\n");
-		return 0xffffffff;
-	}
-	mask=((struct sockaddr_in *)&(ifr.ifr_netmask))->sin_addr.s_addr;
-
-
-	if(verbose==2) printf("broadcast ip=0x%x\n",ip | ~mask);
-
-	close(fd);
-
- 	return (ip | ~mask);
-
 }
 
 /*
