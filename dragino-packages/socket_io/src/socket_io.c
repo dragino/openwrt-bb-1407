@@ -117,7 +117,7 @@ int PLCdel(char *AAAA1, char *X1, char *Y1);
 void PLCprint(char *);
 void PLCexec(void);
 void bcast_init(void);
-
+void restart_asterisk(void);
 
 enum 		   {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
 	  			RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, \
@@ -618,9 +618,17 @@ int process_udp(char *datagram){
 
             }
             break;
+		/*
+		Message: JNTCIT/RestartAsterisk
+		Type: Unicast
+		Arguments: 
+		Description: CFG sends this packet to a device which have to restart its Asterisk server.
+		*/
         case RestartAsterisk:{
 
 				if(verbose==2) printf("Rcv: RestartAsterisk\n");
+
+				restart_asterisk(); 
 
             }
             break;
@@ -2488,3 +2496,16 @@ void bcast_init(void){
     bcast_servaddr.sin_addr.s_addr=inet_addr("255.255.255.255");
     bcast_servaddr.sin_port=htons(PORT);
 }
+
+
+/*
+ * Restart asterisk server
+ */
+void restart_asterisk(void){
+
+    FILE *fp;
+
+    fp=popen("asterisk -rx 'core restart now'","r");
+    pclose(fp);
+}
+
