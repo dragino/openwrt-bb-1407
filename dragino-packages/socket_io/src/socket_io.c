@@ -119,7 +119,7 @@ void PLCexec(void);
 void bcast_init(void);
 void restart_asterisk(void);
 void asterisk_config_write(char *SIPRegistrar1, char *AuthenticationName1, char *Password1, char *SIPRegistrar2, char *AuthenticationName2, char *Password2);
-void asterisk_uptime(char *asterisk_uptime);
+void asterisk_uptime(char *uptime);
 
 enum 		   {ConfigBatmanReq, ConfigBatmanRes, ConfigBatman, ConfigReq, ConfigRes, Config, \
 	  			RestartNetworkService, RestartAsterisk, ConfigAsterisk, AsteriskStatReq, \
@@ -677,9 +677,11 @@ int process_udp(char *datagram){
 
 				asterisk_uptime(ast_uptime);
 
+				printf("uptime = %s\n", ast_uptime);
+
 				if(ast_uptime[0] == '\0'){
 						
-					sprintf(msg, "JNTCIT/AsteriskStatRes/NotRunning/////////");
+					sprintf(msg, "JNTCIT/AsteriskStatRes/NotRunning////////");
 
 				} else {
 				
@@ -692,9 +694,11 @@ int process_udp(char *datagram){
                 	ini_gets("trunk2", "username", "", AuthenticationName2, STR_MAX, "/etc/asterisk/sip.conf");
                 	ini_gets("trunk2", "secret", "", Password2, STR_MAX, "/etc/asterisk/sip.conf");
 
-					sprintf(msg, "JNTCIT/AsteriskStatRes/Running/%s/%s/%s/%s/%s/%s/%s/%s/", ast_uptime, SIPRegistrar1, AuthenticationName1, Password1, SIPRegistrar2, AuthenticationName2, Password2);
+					sprintf(msg, "JNTCIT/AsteriskStatRes/Running/%s/%s/%s/%s/%s/%s/%s/", ast_uptime, SIPRegistrar1, AuthenticationName1, Password1, SIPRegistrar2, AuthenticationName2, Password2);
 
 				}
+
+				if(verbose==2) printf("Sent: %s\n", msg);
 
 				unicast(msg);
 
@@ -2622,14 +2626,20 @@ void asterisk_config_write(char *SIPRegistrar1, char *AuthenticationName1, char 
  * If Asterisk is not started asterisk_uptime is made null string
  * asterisk_uptime needs to be allocated by the caller
  */
-void asterisk_uptime(char *asterisk_uptime){
+void asterisk_uptime(char *uptime){
 
 
     FILE *fp;
     char *ret;
+	int i, len;
 
+	uptime[0]='\0';
     fp=popen("asterisk -rx 'core show uptime' 2>&1 | sed -n -e 's/^.*Last reload: //p'","r");
-    ret=fgets(asterisk_uptime, STR_MAX, fp);
+    ret=fgets(uptime, STR_MAX, fp);
     pclose(fp);
 
+	//Remove trailing space and LF
+	len=strlen(uptime);
+	if(uptime[len-1] == 0xa) uptime[len-1] = '\0';
+	if(uptime[len-2] == ' ') uptime[len-2] = '\0';
 }
