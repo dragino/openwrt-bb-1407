@@ -5,6 +5,7 @@ SFLAG=
 AFLAG=
 
 APP=yun
+IMAGE_SUFFIX=
 
 REPO_PATH=$(pwd)
 VERSION=3.0.2
@@ -69,6 +70,10 @@ if [ -f .config.$APP ];then
 	cp .config.$APP $OPENWRT_PATH/.config
 fi
 
+if [ $APP == "SIOD" ];then
+	IMAGE_SUFFIX="_siod"
+fi
+
 echo ""
 echo "***Entering build directory***"
 cd $OPENWRT_PATH
@@ -88,7 +93,7 @@ echo " Run defconfig"
 echo ""
 make defconfig > /dev/null
 
-[ -f ./bin/ar71xx/openwrt-ar71xx-generic-dragino2-squashfs-sysupgrade.bin ] && rm ./bin/ar71xx/openwrt-ar71xx-generic-dragino2-squashfs-sysupgrade.bin
+[ -f ./bin/ar71xx/openwrt-ar71xx-generic-dragino2{$IMAGE_SUFFIX}-squashfs-sysupgrade.bin ] && rm ./bin/ar71xx/openwrt-ar71xx-generic-dragino2-squashfs-sysupgrade.bin
 
 echo ""
 if [ ! -z $SFLAG ];then
@@ -100,7 +105,7 @@ else
 fi
 
 
-if [ ! -f ./bin/ar71xx/openwrt-ar71xx-generic-dragino2-squashfs-sysupgrade.bin ];then
+if [ ! -f ./bin/ar71xx/openwrt-ar71xx-generic-dragino2$IMAGE_SUFFIX-squashfs-sysupgrade.bin ];then
 	echo ""
 	echo "Build Fails, run below commands to build the image in single thread and check what is wrong"
 	echo "**************"
@@ -117,14 +122,14 @@ IMAGE_DIR=$REPO_PATH/image/$APP-build--v$VERSION--$DATE
 
 echo ""
 echo  "***Move files to ./image/$APP-build--v$VERSION--$DATE ***"
-cp ./bin/ar71xx/openwrt-ar71xx-generic-dragino2-kernel.bin     $IMAGE_DIR/dragino2-$APP-v$VERSION-kernel.bin
-cp ./bin/ar71xx/openwrt-ar71xx-generic-dragino2-rootfs-squashfs.bin   $IMAGE_DIR/dragino2-$APP-v$VERSION-rootfs-squashfs.bin
-cp ./bin/ar71xx/openwrt-ar71xx-generic-dragino2-squashfs-sysupgrade.bin $IMAGE_DIR/dragino2-$APP-v$VERSION-squashfs-sysupgrade.bin
+cp ./bin/ar71xx/openwrt-ar71xx-generic-dragino2$IMAGE_SUFFIX-kernel.bin     $IMAGE_DIR/dragino2-$APP-v$VERSION-kernel.bin
+cp ./bin/ar71xx/openwrt-ar71xx-generic-dragino2$IMAGE_SUFFIX-rootfs-squashfs.bin   $IMAGE_DIR/dragino2-$APP-v$VERSION-rootfs-squashfs.bin
+cp ./bin/ar71xx/openwrt-ar71xx-generic-dragino2$IMAGE_SUFFIX-squashfs-sysupgrade.bin $IMAGE_DIR/dragino2-$APP-v$VERSION-squashfs-sysupgrade.bin
 
 
 echo ""
 echo "***Update md5sums***"
-cat ./bin/ar71xx/md5sums | grep "dragino2" | awk '{gsub(/openwrt-ar71xx-generic-dragino2/,"dragino2-'"$APP"'-v'"$VERSION"'")}{print}' >> $IMAGE_DIR/md5sums
+cat ./bin/ar71xx/md5sums | grep "dragino2" | awk '{gsub(/openwrt-ar71xx-generic-dragino2'"$IMAGE_SUFFIX"'-/,"dragino2-'"$APP"'-v'"$VERSION"'-")}{print}' >> $IMAGE_DIR/md5sums
 
 
 echo ""

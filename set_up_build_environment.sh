@@ -61,14 +61,15 @@ $OPENWRT_PATH/scripts/feeds install -a
 echo " "
 
 echo ""
-#echo "copy Dragino2 Platform info"
-#rsync -avC platform/target/ $OPENWRT_PATH/target/
+echo "Patch Dragino2 Platform"
+rsync -avC platform/target/ $OPENWRT_PATH/target/
 
 
 echo " "
 echo "*** Install OpenWrt BB 14.07 patches"
 cp bb_1407_patch/619-MIPS-ath79-Linino-uart-fix-baudrate.patch $OPENWRT_PATH/target/linux/ar71xx/patches-3.10/
 cp bb_1407_patch/903-ar933x_uart_baud_max_step_fix.patch $OPENWRT_PATH/target/linux/ar71xx/patches-3.10/
+cp bb_1407_patch/730-MIPS-ath79-add-dragino-siod-support.patch $OPENWRT_PATH/target/linux/ar71xx/patches-3.10/
 echo " "
 
 #Remove tmp directory
