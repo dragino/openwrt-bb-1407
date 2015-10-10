@@ -33,7 +33,6 @@
  * named "Router".
  */
 
-#define DRAGINO2_GPIO_LED_SYS		28
 #define DRAGINO2_GPIO_BTN_JUMPSTART	11
 #define DRAGINO2_GPIO_BTN_RESET		12
 
@@ -60,11 +59,6 @@ static struct gpio_led dragino2_leds_gpio[] __initdata = {
 		.name		= "dragino2:red:lan",
 		.gpio		= DRAGINO2_GPIO_LED_LAN,
 		.active_low	= 1,
-	},
-	{
-		.name		= "dragino2:red:system",
-		.gpio		= DRAGINO2_GPIO_LED_SYS,
-		.active_low	= 0,
 	},
 };
 
