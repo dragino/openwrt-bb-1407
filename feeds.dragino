@@ -2,13 +2,11 @@
 #For up-to-date source, comment the src-link one and uncomment the src-git/src-svn one
 src-git packages https://github.com/openwrt/packages.git;for-14.07
 src-git routing https://github.com/openwrt-routing/packages.git;for-14.07
-src-git telephony http://git.openwrt.org/feed/telephony.git;for-14.07
+src-git telephony https://github.com/openwrt/telephony.git^4165841e
 src-git management https://github.com/openwrt-management/packages.git;for-14.07
 src-git oldpackages http://git.openwrt.org/14.07/packages.git
 src-git alljoyn https://git.allseenalliance.org/gerrit/core/openwrt_feed;barrier_breaker
-
-
-src-link dragino ../../dragino-packages
+src-git dragino https://github.com/dragino/dragino-packages.git
 src-link luci ../../luci-0.12
 
 
