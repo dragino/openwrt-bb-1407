@@ -1,1 +1,0 @@
-../init.d/set-mesh-gw-mode.sh

@@ -9,6 +9,10 @@ config interface 'bat'
 	option ifname 'bat0 eth1'
 	option type 'bridge'
 	option mtu '1500'
+	option ipaddr 192.168.99.100
+	option netmask 255.255.255.0
+	option proto static
+	option dns 8.8.8.8
 
 config interface 'batnet'
 	option mtu '1532'

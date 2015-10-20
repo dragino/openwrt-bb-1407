@@ -1700,7 +1700,7 @@ CONFIG_PACKAGE_kmod-ipt-nathelper=y
 # CONFIG_PACKAGE_kmod-atm is not set
 # CONFIG_PACKAGE_kmod-ax25 is not set
 CONFIG_PACKAGE_kmod-batman-adv=y
-# CONFIG_KMOD_BATMAN_ADV_DEBUG_LOG is not set
+CONFIG_KMOD_BATMAN_ADV_DEBUG_LOG=y
 CONFIG_KMOD_BATMAN_ADV_BLA=y
 CONFIG_KMOD_BATMAN_ADV_DAT=y
 CONFIG_KMOD_BATMAN_ADV_MCAST=y
@@ -2143,7 +2143,7 @@ CONFIG_PACKAGE_libpolarssl=y
 #
 # Telephony
 #
-# CONFIG_PACKAGE_bcg729 is not set
+CONFIG_PACKAGE_bcg729=y
 # CONFIG_PACKAGE_dahdi-tools-libtonezone is not set
 # CONFIG_PACKAGE_libiksemel is not set
 # CONFIG_PACKAGE_libosip2 is not set
@@ -2514,7 +2514,7 @@ CONFIG_PACKAGE_luci-mod-secn=y
 # CONFIG_PACKAGE_luci-app-ddns is not set
 # CONFIG_PACKAGE_luci-app-diag-core is not set
 # CONFIG_PACKAGE_luci-app-diag-devinfo is not set
-# CONFIG_PACKAGE_luci-app-dragino-voip-webpanel is not set
+CONFIG_PACKAGE_luci-app-dragino-voip-webpanel=y
 CONFIG_PACKAGE_luci-app-firewall=y
 # CONFIG_PACKAGE_luci-app-freifunk-diagnostics is not set
 # CONFIG_PACKAGE_luci-app-freifunk-policyrouting is not set
@@ -3287,7 +3287,85 @@ CONFIG_PACKAGE_openssh-sftp-server=y
 #
 # CONFIG_PACKAGE_asterisk11 is not set
 # CONFIG_PACKAGE_asterisk13 is not set
-# CONFIG_PACKAGE_asterisk18 is not set
+CONFIG_PACKAGE_asterisk18=y
+# CONFIG_PACKAGE_asterisk18-app-alarmreceiver is not set
+# CONFIG_PACKAGE_asterisk18-app-authenticate is not set
+CONFIG_PACKAGE_asterisk18-app-chanisavail=y
+# CONFIG_PACKAGE_asterisk18-app-chanspy is not set
+# CONFIG_PACKAGE_asterisk18-app-directed_pickup is not set
+# CONFIG_PACKAGE_asterisk18-app-disa is not set
+# CONFIG_PACKAGE_asterisk18-app-exec is not set
+# CONFIG_PACKAGE_asterisk18-app-minivm is not set
+# CONFIG_PACKAGE_asterisk18-app-mixmonitor is not set
+# CONFIG_PACKAGE_asterisk18-app-originate is not set
+CONFIG_PACKAGE_asterisk18-app-playtones=y
+CONFIG_PACKAGE_asterisk18-app-read=y
+# CONFIG_PACKAGE_asterisk18-app-readexten is not set
+# CONFIG_PACKAGE_asterisk18-app-record is not set
+# CONFIG_PACKAGE_asterisk18-app-sayunixtime is not set
+CONFIG_PACKAGE_asterisk18-app-senddtmf=y
+# CONFIG_PACKAGE_asterisk18-app-setcallerid is not set
+# CONFIG_PACKAGE_asterisk18-app-sms is not set
+# CONFIG_PACKAGE_asterisk18-app-stack is not set
+# CONFIG_PACKAGE_asterisk18-app-system is not set
+# CONFIG_PACKAGE_asterisk18-app-talkdetect is not set
+# CONFIG_PACKAGE_asterisk18-app-verbose is not set
+# CONFIG_PACKAGE_asterisk18-app-waituntil is not set
+# CONFIG_PACKAGE_asterisk18-app-while is not set
+# CONFIG_PACKAGE_asterisk18-cdr is not set
+# CONFIG_PACKAGE_asterisk18-cdr-csv is not set
+# CONFIG_PACKAGE_asterisk18-chan-agent is not set
+# CONFIG_PACKAGE_asterisk18-chan-gtalk is not set
+CONFIG_PACKAGE_asterisk18-chan-iax2=y
+# CONFIG_PACKAGE_asterisk18-chan-local is not set
+# CONFIG_PACKAGE_asterisk18-chan-mgcp is not set
+# CONFIG_PACKAGE_asterisk18-chan-ooh323 is not set
+# CONFIG_PACKAGE_asterisk18-chan-sccp-b is not set
+# CONFIG_PACKAGE_asterisk18-chan-skinny is not set
+CONFIG_PACKAGE_asterisk18-codec-a-mu=y
+CONFIG_PACKAGE_asterisk18-codec-alaw=y
+CONFIG_PACKAGE_asterisk18-codec-g722=y
+CONFIG_PACKAGE_asterisk18-codec-g726=y
+CONFIG_PACKAGE_asterisk18-codec-g729=y
+# CONFIG_PACKAGE_asterisk18-curl is not set
+# CONFIG_PACKAGE_asterisk18-format-g726 is not set
+# CONFIG_PACKAGE_asterisk18-format-g729 is not set
+# CONFIG_PACKAGE_asterisk18-format-sln is not set
+# CONFIG_PACKAGE_asterisk18-format-sln16 is not set
+# CONFIG_PACKAGE_asterisk18-func-base64 is not set
+# CONFIG_PACKAGE_asterisk18-func-blacklist is not set
+CONFIG_PACKAGE_asterisk18-func-channel=y
+# CONFIG_PACKAGE_asterisk18-func-cut is not set
+# CONFIG_PACKAGE_asterisk18-func-db is not set
+# CONFIG_PACKAGE_asterisk18-func-devstate is not set
+# CONFIG_PACKAGE_asterisk18-func-extstate is not set
+# CONFIG_PACKAGE_asterisk18-func-global is not set
+# CONFIG_PACKAGE_asterisk18-func-groupcount is not set
+# CONFIG_PACKAGE_asterisk18-func-shell is not set
+# CONFIG_PACKAGE_asterisk18-func-uri is not set
+# CONFIG_PACKAGE_asterisk18-func-vmcount is not set
+# CONFIG_PACKAGE_asterisk18-mysql is not set
+# CONFIG_PACKAGE_asterisk18-odbc is not set
+# CONFIG_PACKAGE_asterisk18-pbx-ael is not set
+# CONFIG_PACKAGE_asterisk18-pbx-lua is not set
+# CONFIG_PACKAGE_asterisk18-pbx-spool is not set
+# CONFIG_PACKAGE_asterisk18-pgsql is not set
+# CONFIG_PACKAGE_asterisk18-res-ael-share is not set
+# CONFIG_PACKAGE_asterisk18-res-agi is not set
+# CONFIG_PACKAGE_asterisk18-res-clioriginate is not set
+# CONFIG_PACKAGE_asterisk18-res-crypto is not set
+# CONFIG_PACKAGE_asterisk18-res-fax is not set
+# CONFIG_PACKAGE_asterisk18-res-fax-spandsp is not set
+# CONFIG_PACKAGE_asterisk18-res-monitor is not set
+# CONFIG_PACKAGE_asterisk18-res-musiconhold is not set
+# CONFIG_PACKAGE_asterisk18-res-phoneprov is not set
+# CONFIG_PACKAGE_asterisk18-res-pktccops is not set
+# CONFIG_PACKAGE_asterisk18-res-smdi is not set
+# CONFIG_PACKAGE_asterisk18-res-srtp is not set
+# CONFIG_PACKAGE_asterisk18-res-timing-pthread is not set
+CONFIG_PACKAGE_asterisk18-res-timing-timerfd=y
+CONFIG_PACKAGE_asterisk18-sounds=y
+# CONFIG_PACKAGE_asterisk18-voicemail is not set
 # CONFIG_PACKAGE_baresip is not set
 # CONFIG_PACKAGE_freeswitch is not set
 # CONFIG_PACKAGE_kamailio3 is not set
@@ -3570,7 +3648,7 @@ CONFIG_PACKAGE_chat=y
 # CONFIG_PACKAGE_faifa is not set
 # CONFIG_PACKAGE_fakeidentd is not set
 # CONFIG_PACKAGE_flow-tools is not set
-# CONFIG_PACKAGE_fping is not set
+CONFIG_PACKAGE_fping=y
 # CONFIG_PACKAGE_fprobe is not set
 # CONFIG_PACKAGE_fprobe-ulog is not set
 # CONFIG_PACKAGE_gpsd is not set
@@ -3975,7 +4053,7 @@ CONFIG_PACKAGE_swap-utils=y
 # CONFIG_PACKAGE_ap51-flash is not set
 # CONFIG_PACKAGE_apcupsd is not set
 # CONFIG_PACKAGE_at is not set
-# CONFIG_PACKAGE_auto-update-packages is not set
+CONFIG_PACKAGE_auto-update-packages=y
 # CONFIG_PACKAGE_avrdude is not set
 # CONFIG_PACKAGE_avrusbboot is not set
 # CONFIG_PACKAGE_bandwidthd is not set
@@ -4198,7 +4276,7 @@ CONFIG_PACKAGE_socket_io=y
 # CONFIG_PACKAGE_tmux is not set
 # CONFIG_PACKAGE_triggerhappy is not set
 # CONFIG_PACKAGE_uboot-envtools is not set
-# CONFIG_PACKAGE_udpcli is not set
+CONFIG_PACKAGE_udpcli=y
 # CONFIG_PACKAGE_ugps is not set
 # CONFIG_PACKAGE_upx is not set
 CONFIG_PACKAGE_usb-modeswitch=y
