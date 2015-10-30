@@ -8,6 +8,7 @@ src-git oldpackages http://git.openwrt.org/14.07/packages.git
 src-git alljoyn https://git.allseenalliance.org/gerrit/core/openwrt_feed;barrier_breaker
 src-git dragino https://github.com/dragino/dragino-packages.git
 src-link luci ../../luci-0.12
+src-git fxs https://github.com/villagetelco/vt-fxs-packages.git
 
 
 #src-svn xwrt http://x-wrt.googlecode.com/svn/trunk/package
