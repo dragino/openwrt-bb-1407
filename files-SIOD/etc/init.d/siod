@@ -7,11 +7,12 @@ start() {
 	then
 		load_config
 	fi
-	socket_io -vv &
+	ps | grep "socket_io" | grep -v grep | awk '{print $1}' | xargs kill -s 9
+	socket_io &
 }
 
 load_config()
 {
-    uci set siod.siod_id.id=$(hexdump -v -e '1/1 "%.2x"' -s $((0x120)) -n 3 /dev/mtd6)
+    uci set siod.siod_id.id=$(hexdump -v -e '1/1 "%.2x"' -s $((0x1005)) -n 3 /dev/mtd6)
 	uci commit siod
 }

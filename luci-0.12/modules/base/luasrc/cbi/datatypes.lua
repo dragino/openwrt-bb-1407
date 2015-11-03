@@ -343,3 +343,39 @@ end
 function phonedigit(val)
 	return (val:match("^[0-9\*#!%.]+$") ~= nil)
 end
+
+function siod_plc_rule(val)
+	val1=val:match("%d%d%d%d/[0-3]/[0-1]/%d%d%d%d/[0-7]/[0-1]")
+	val2,val3=val:match("%d%d%d%d/[0-3]/[0-1]/%d%d%d%d/[0-7]/[0-1]/(%w+)(/%d%d%d%d/[0-7]/[0-1])")
+	if val1 == nil then
+		return false
+	end
+
+	if val2 ~= "and" and val2 ~= "or" or val3 == nil then
+		if val:len() ~= 17 then
+			return false
+		end
+	end
+	return true
+end
+
+function siod_time_range(val)
+	val1,val2=val:match("(.+)/(.+)")
+	if val1 ~= nil then
+		if val1:match("^[0-6]$") == nil then
+			if val1:match("^[0-6]%-[0-6]$") == nil then	
+				if val1:match("^[0-3]?%d%w%w%w%d%d%d%d$") == nil then
+					if val1:match("^[0-3]?%d%w%w%w%d%d%d%d%-[0-3]?%d%w%w%w%d%d%d%d$") == nil then
+						return false
+					end
+				end
+			end
+		end
+	end
+	if val2 ~= nil then
+		if val2:match("^[0-2]?%d:[0-6]?%d:[0-6]?%d%-[0-2]?%d:[0-6]?%d:[0-6]?%d$") == nil then 
+			return false
+		end
+	end
+	return true
+end
