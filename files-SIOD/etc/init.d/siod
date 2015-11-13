@@ -8,7 +8,12 @@ start() {
 		load_config
 	fi
 	ps | grep "socket_io" | grep -v grep | awk '{print $1}' | xargs kill -s 9
+	sleep 2
 	socket_io &
+}
+
+stop() {
+	ps | grep "socket_io" | grep -v grep | awk '{print $1}' | xargs kill -s 9
 }
 
 load_config()

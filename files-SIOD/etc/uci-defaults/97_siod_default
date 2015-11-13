@@ -1,13 +1,9 @@
 #!/bin/sh
-uci batch <<-EOF
-	wifi_mac=$(hexdump -v -e '1/1 "%.2x"' -s $((0x1005)) -n 3 /dev/mtd6)
-    set siod.siod_id.id=$wifi_mac
-	commit siod
-	add ucitrack siod
-	set ucitrack.@siod[0].init=siod
-	commit ucitrack
-	set network.bat.hostname=siod-$wifi_mac
-	commit network
-EOF
+wifi_mac=$(hexdump -v -e '1/1 "%.2x"' -s $((0x1005)) -n 3 /dev/mtd6)
+uci set siod.siod_id.id=$wifi_mac
+uci add ucitrack siod
+uci	set ucitrack.@siod[0].init=siod
+uci	set network.bat.hostname=siod-$wifi_mac
+uci	commit
 
 exit 0

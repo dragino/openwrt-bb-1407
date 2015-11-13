@@ -1,6 +1,9 @@
+
 config system
 	option timezone 'UTC'
-	option hostname 'dragino2'
+	option key '4a2b605e7619702aefa22cb08732f28f'
+	option device '705641548087e9785ef6b0cb3aae95eb'
+	option hostname 'siod-143740'
 	option firstboot '1'
 
 config timeserver 'ntp'
@@ -16,13 +19,20 @@ config restorefactory
 	option timeout '5'
 
 config led 'led_wlan'
-        option name 'WLAN'
-        option sysfs 'dragino2:red:wlan'
-        option trigger 'phy0tpt'
-		
+	option name 'WLAN'
+	option sysfs 'dragino2:red:wlan'
+	option trigger 'phy0tpt'
+
 config led 'led_wan'
 	option name 'WAN'
 	option sysfs 'dragino2:red:wan'
 	option trigger 'netdev'
 	option dev 'eth1'
 	option mode 'link tx rx'
+
+config oem 'vendor'
+	option name 'siod'
+	option ssid_prefix 'siod'
+	option hostname 'siod'
+	option web_model 'JNT SIOD'
+
