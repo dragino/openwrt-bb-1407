@@ -40,17 +40,18 @@ w:value("USB-Modem","USB Modem")
 local wssid = s:option(Value, "wanssid", "SSID")
 wssid:depends("wanport","WiFi")
 
-local wpwd = s:option(Value, "wanpass", "Password")
-wpwd:depends("wanport","WiFi")
-wpwd.password = true
-
 local wencr = s:option(ListValue,"wanencr","Encryption")
 wencr:depends("wanport","WiFi")
 wencr:value("none", "No Encryption")
 wencr:value("wep", "WEP")
-wencr:value("psk", "WPA-PSK")
-wencr:value("psk2", "WPA2-PSK")
---#####################wencr:value("psk-mixed", "WPA-PSK/WPA2-PSK Mixed Mode")
+wencr:value("psk", "WPA")
+wencr:value("psk2", "WPA2")
+wencr:value("mixed-psk", "WPA-WPA2")
+wencr:value("mixed-psk+tkip+aes", "WPA-WPA2-AES")
+
+local wpwd = s:option(Value, "wanpass", "Password")
+wpwd:depends("wanport","WiFi")
+wpwd.password = true
 
 local p = s:option(ListValue, "ethwanmode", "Way to Get IP")
 --p.override_values = true

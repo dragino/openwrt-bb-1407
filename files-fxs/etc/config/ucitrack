@@ -1,7 +1,3 @@
-config secn
-	option exec /usr/bin/config_secn
-	list affects network
-
 config dial-rules
 	list affects voip
 	

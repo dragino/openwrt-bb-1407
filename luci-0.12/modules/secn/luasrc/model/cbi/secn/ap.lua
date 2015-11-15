@@ -30,18 +30,23 @@ ssid.default= luci.sys.hostname()
 ssid.placeholder = "Default:" .. luci.sys.hostname()
 
 local encry = s:option(ListValue, "encryption", "Encryption")
-encry:value("WPA1","WPA1")
-encry:value("WPA2","WPA2")
-encry:value("WEP","WEP")
-encry:value("NONE","None")
+encry:value("mixed-psk+tkip+aes","WPA-WPA2-AES")
+encry:value("mixed-psk","WPA-WPA2")
+encry:value("psk","WPA")
+encry:value("psk2","WPA2")
+encry:value("wep","WEP")
+encry:value("none","None")
 
 local pwd = s:option(Value, "passphrase", "Passphrase")
 pwd.default= "dragino-dragino"
 pwd.placeholder = "AP Password"
 pwd.password = true
-pwd:depends("encryption","WPA1")
-pwd:depends("encryption","WPA2")
-pwd:depends("encryption","WEP")
+pwd:depends("encryption","mixed-psk+tkip+aes")
+pwd:depends("encryption","mixed-psk")
+pwd:depends("encryption","psk")
+pwd:depends("encryption","psk2")
+pwd:depends("encryption","wep")
+
 
 
 local channel = s:option(ListValue, "channel", "Channel")

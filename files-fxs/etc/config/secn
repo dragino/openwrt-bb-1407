@@ -26,6 +26,7 @@ config secn 'accesspoint'
 
 config secn 'mesh'
 	option mesh_enable 'unchecked'
+	option mpgw 'OFF'
 
 config secn 'dhcp'
 	option domain 'dragino2'
