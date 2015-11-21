@@ -28,6 +28,7 @@ config dhcp 'lan'
 	option start '200'
 	option limit '40'
 	option dhcp_option '1,255.255.255.0  3,10.130.1.1  6,8.8.8.8,8.8.4.4'
+	option dhcpv6 'disabled'
 
 config dhcp 'wan'
 	option interface 'wan'

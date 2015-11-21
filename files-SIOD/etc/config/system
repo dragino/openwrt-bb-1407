@@ -35,4 +35,6 @@ config oem 'vendor'
 	option ssid_prefix 'siod'
 	option hostname 'siod'
 	option web_model 'JNT SIOD'
+	option company_name 'JNT System'
+	option company_url 'http://www.jnt.se/'
 

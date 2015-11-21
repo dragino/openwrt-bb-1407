@@ -8,7 +8,7 @@ APP=yun
 IMAGE_SUFFIX=
 
 REPO_PATH=$(pwd)
-VERSION=3.0.2
+VERSION=3.1.0
 OPENWRT_PATH="barrier_breaker"
 
 while getopts 'a:p:v:sh' OPTION
@@ -132,11 +132,13 @@ echo "***Update md5sums***"
 cat ./bin/ar71xx/md5sums | grep "dragino2" | awk '{gsub(/openwrt-ar71xx-generic-dragino2'"$IMAGE_SUFFIX"'-/,"dragino2-'"$APP"'-v'"$VERSION"'-")}{print}' >> $IMAGE_DIR/md5sums
 
 
-echo ""
-echo "***Back Up Custom Config to Image DIR***"
-mkdir $IMAGE_DIR/custom_config
-[ -f $REPO_PATH/.config.$APP ] && cp $REPO_PATH/.config.$APP $IMAGE_DIR/custom_config/.config
-[ -d $REPO_PATH/files-$APP ] && cp -r $REPO_PATH/files-$APP $IMAGE_DIR/custom_config/files
+#echo ""
+#echo "***Back Up Custom Config to Image DIR***"
+#mkdir $IMAGE_DIR/custom_config
+#[ -f $REPO_PATH/.config.$APP ] && cp $REPO_PATH/.config.$APP $IMAGE_DIR/custom_config/.config
+#[ -d $REPO_PATH/files-$APP ] && cp -r $REPO_PATH/files-$APP $IMAGE_DIR/custom_config/files
+
+cd $REPO_PATH
 
 echo ""
 echo "End Dragino2 build"
