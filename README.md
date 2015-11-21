@@ -18,7 +18,7 @@ git clone https://github.com/dragino/openwrt-bb-1407.git dragino2-BB-IoT
 cd dragino2-BB-IoT
 ./set_up_build_enviroment.sh
 #build default IoT App on barrier_breaker directory
-./build_image.sh   
+./build_image.sh -a IoT
 ```
 
 After complination, the images can be found on **dragino2-BB-IoT/image** folder. The folder includes:
