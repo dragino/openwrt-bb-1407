@@ -22,11 +22,11 @@ cd dragino2-BB-IoT
 ```
 
 After complination, the images can be found on **dragino2-BB-IoT/image** folder. The folder includes:
-*openwrt-ar71xx-generic-dragino2-kernel.bin  kernel files, for upgrade in u-boot
-*openwrt-ar71xx-generic-dragino2-rootfs-squashfs.bin    rootfs file, for upgrade in u-boot
-*openwrt-ar71xx-generic-dragino2-squashfs-sysupgrade.bin   sysupgrade file, used for web-ui upgrade
-*md5sum  md5sum for above files
-*custom_config Customized files and config for this build , as a back up
+-*openwrt-ar71xx-generic-dragino2-kernel.bin  kernel files, for upgrade in u-boot
+-*openwrt-ar71xx-generic-dragino2-rootfs-squashfs.bin    rootfs file, for upgrade in u-boot
+-*openwrt-ar71xx-generic-dragino2-squashfs-sysupgrade.bin   sysupgrade file, used for web-ui upgrade
+-*md5sum  md5sum for above files
+
 
 More build option can be viewed by running:
 ``` bash
