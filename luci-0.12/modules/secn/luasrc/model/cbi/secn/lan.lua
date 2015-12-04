@@ -22,7 +22,7 @@ local lan_prex = string.match(lanip,"(%d+%p%d+%p%d+%p)%d+")
 m = Map("secn", translate("Small Enterprise-Campus Network"))
 s = m:section(NamedSection, "dhcp", "secn", translate("LAN and DHCP"))
 s.addremove = false
-m:chain("network")
+--m:chain("network")
 
 local ip = s:option(Value, "ipaddr", "IP Address")
 ip.datatype = "ipaddr"

@@ -8,7 +8,7 @@ APP=yun
 IMAGE_SUFFIX=
 
 REPO_PATH=$(pwd)
-VERSION=3.1.0
+VERSION=3.1.2
 OPENWRT_PATH="barrier_breaker"
 
 while getopts 'a:p:v:sh' OPTION

@@ -4,7 +4,7 @@ LuCI - Lua Configuration Interface
 Copyright 2008 Steven Barth <steven@midlink.org>
 Copyright 2008 Jo-Philipp Wich <xm@leipzig.freifunk.net>
 
-Copyright 2013 Edwin Chen <edwin@dragino.com>
+Copyright 2013~2015 Edwin Chen <edwin@dragino.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,9 @@ local utility = require "dragino.utility"
 
 local has_pptp  = fs.access("/usr/sbin/pptp")
 local has_pppoe = fs.glob("/usr/lib/pppd/*/rp-pppoe.so")()
+local has_cdc_eth = fs.glob("/lib/modules/*/cdc_ether.ko")
 
+local cdc_eth_if = sys.exec('ifconfig -a | grep "HWaddr" | grep -v "A8:40:41" | grep -v "teql0" | awk \'{print $1}\'') or 'none'
 
 m = Map("secn", translate("Small Enterprise-Campus Network"))
 s = m:section(NamedSection, "wan", "secn", translate("Internet Access"))
@@ -36,6 +38,11 @@ w:value("Ethernet","WAN Port")
 w:value("WiFi","WiFi Client")
 w:value("Mesh","Mesh WiFi")
 w:value("USB-Modem","USB Modem")
+if has_cdc_eth then w:value("USB-Eth-Modem","USB Ethernet Modem") end
+
+local usbif = s:option(Value, "usb_eth_if", "USB Ethernet Interface")
+usbif.default = cdc_eth_if
+usbif:depends("wanport","USB-Eth-Modem")
 
 local wssid = s:option(Value, "wanssid", "SSID")
 wssid:depends("wanport","WiFi")
