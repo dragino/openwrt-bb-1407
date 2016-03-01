@@ -25,7 +25,7 @@ local has_pptp  = fs.access("/usr/sbin/pptp")
 local has_pppoe = fs.glob("/usr/lib/pppd/*/rp-pppoe.so")()
 local has_cdc_eth = fs.glob("/lib/modules/*/cdc_ether.ko")
 
-local cdc_eth_if = sys.exec('ifconfig -a | grep "HWaddr" | grep -v "A8:40:41" | grep -v "teql0" | awk \'{print $1}\'') or 'none'
+local cdc_eth_if = sys.exec('ifconfig -a | grep "HWaddr" | grep -v "A8:40:41\|bat0\|teql0\|wlan0" | awk \'{print $1}\'') or 'none'
 
 m = Map("secn", translate("Small Enterprise-Campus Network"))
 s = m:section(NamedSection, "wan", "secn", translate("Internet Access"))
