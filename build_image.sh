@@ -3,20 +3,26 @@
 
 SFLAG=
 AFLAG=
+BFLAG
 
 APP=yun
+APP2=
 IMAGE_SUFFIX=
 
 REPO_PATH=$(pwd)
 VERSION=3.1.2
 OPENWRT_PATH="barrier_breaker"
 
-while getopts 'a:p:v:sh' OPTION
+while getopts 'a:b:p:v:sh' OPTION
 do
 	case $OPTION in
 	a)	
 		AFLAG=1
 		APP="$OPTARG"
+		;;
+	b)	
+		BFLAG=1
+		APP2="$OPTARG"
 		;;
 
 	p)	OPENWRT_PATH="$OPTARG"
@@ -72,6 +78,11 @@ fi
 
 if [ $APP == "SIOD" ];then
 	IMAGE_SUFFIX="_siod"
+fi
+
+#Copy the second level APP info. normally is OEM info
+if [ ! -z $BFLAG ];then
+	cp -r sub-files-$APP2/* $OPENWRT_PATH/files/
 fi
 
 echo ""
