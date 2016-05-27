@@ -3,14 +3,14 @@
 
 SFLAG=
 AFLAG=
-BFLAG
+BFLAG=
 
 APP=yun
 APP2=
 IMAGE_SUFFIX=
 
 REPO_PATH=$(pwd)
-VERSION=3.1.2
+VERSION=3.1.7
 OPENWRT_PATH="barrier_breaker"
 
 while getopts 'a:b:p:v:sh' OPTION
@@ -82,7 +82,9 @@ fi
 
 #Copy the second level APP info. normally is OEM info
 if [ ! -z $BFLAG ];then
+	echo copying sub-files-$APP2
 	cp -r sub-files-$APP2/* $OPENWRT_PATH/files/
+	
 fi
 
 echo ""
@@ -128,19 +130,19 @@ fi
 echo "Copy Image"
 echo "Set up new directory name with date"
 DATE=`date +%Y%m%d-%H%M`
-mkdir -p $REPO_PATH/image/$APP-build--v$VERSION--$DATE
-IMAGE_DIR=$REPO_PATH/image/$APP-build--v$VERSION--$DATE
+mkdir -p $REPO_PATH/image/$APP-$APP2-build--v$VERSION--$DATE
+IMAGE_DIR=$REPO_PATH/image/$APP-$APP2-build--v$VERSION--$DATE
 
 echo ""
 echo  "***Move files to ./image/$APP-build--v$VERSION--$DATE ***"
-cp ./bin/ar71xx/openwrt-ar71xx-generic-dragino2$IMAGE_SUFFIX-kernel.bin     $IMAGE_DIR/dragino2-$APP-v$VERSION-kernel.bin
-cp ./bin/ar71xx/openwrt-ar71xx-generic-dragino2$IMAGE_SUFFIX-rootfs-squashfs.bin   $IMAGE_DIR/dragino2-$APP-v$VERSION-rootfs-squashfs.bin
-cp ./bin/ar71xx/openwrt-ar71xx-generic-dragino2$IMAGE_SUFFIX-squashfs-sysupgrade.bin $IMAGE_DIR/dragino2-$APP-v$VERSION-squashfs-sysupgrade.bin
+cp ./bin/ar71xx/openwrt-ar71xx-generic-dragino2$IMAGE_SUFFIX-kernel.bin     $IMAGE_DIR/dragino2-$APP-$APP2-v$VERSION-kernel.bin
+cp ./bin/ar71xx/openwrt-ar71xx-generic-dragino2$IMAGE_SUFFIX-rootfs-squashfs.bin   $IMAGE_DIR/dragino2-$APP-$APP2-v$VERSION-rootfs-squashfs.bin
+cp ./bin/ar71xx/openwrt-ar71xx-generic-dragino2$IMAGE_SUFFIX-squashfs-sysupgrade.bin $IMAGE_DIR/dragino2-$APP-$APP2-v$VERSION-squashfs-sysupgrade.bin
 
 
 echo ""
 echo "***Update md5sums***"
-cat ./bin/ar71xx/md5sums | grep "dragino2" | awk '{gsub(/openwrt-ar71xx-generic-dragino2'"$IMAGE_SUFFIX"'-/,"dragino2-'"$APP"'-v'"$VERSION"'-")}{print}' >> $IMAGE_DIR/md5sums
+cat ./bin/ar71xx/md5sums | grep "dragino2" | awk '{gsub(/openwrt-ar71xx-generic-dragino2'"$IMAGE_SUFFIX"'-/,"dragino2-'"$APP"'-'"$APP2"'-v'"$VERSION"'-")}{print}' >> $IMAGE_DIR/md5sums
 
 
 #echo ""

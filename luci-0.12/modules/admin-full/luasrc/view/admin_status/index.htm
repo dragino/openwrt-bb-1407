@@ -19,6 +19,7 @@ You may obtain a copy of the License at
 
 	local has_ipv6 = luci.fs.access("/proc/net/ipv6_route")
 	local has_dhcp = luci.fs.access("/etc/config/dhcp")
+	local has_cellular = luci.fs.access("/var/cellular/info")
 	local has_wifi = luci.fs.stat("/etc/config/wireless")
 	      has_wifi = has_wifi and has_wifi.size > 0
 	local _, _, memtotal, memcached, membuffers, memfree, _, swaptotal, swapcached, swapfree = luci.sys.sysinfo()
@@ -30,7 +31,8 @@ You may obtain a copy of the License at
 	
 	local utility = require "dragino.utility"
 	local firmwre_version,build_time = utility.getVersion() 
-
+	local ICCID,IMEI,IMSI,operator,tech_type,reg_status,band,sig_Q = utility.getCellularInfo()
+	
 	if luci.http.formvalue("status") == "1" then
 		local ntm = require "luci.model.network".init()
 		local wan = ntm:get_wannet()
@@ -596,6 +598,21 @@ You may obtain a copy of the License at
 		<tr><td width="33%"><%:Total Available%></td><td id="swaptotal">-</td></tr>
 		<tr><td width="33%"><%:Free%></td><td id="swapfree">-</td></tr>
 		<tr><td width="33%"><%:Cached%></td><td id="swapcache">-</td></tr>
+	</table>
+</fieldset>
+<% end %>
+
+<% if has_cellular then %>
+<fieldset class="cbi-section">
+	<legend><%:Cellular%></legend>
+	<table width="100%" cellspacing="10">
+		<tr><td width="33%"><%:IMEI%></td><td><%=IMEI%> </td></tr>
+		<tr><td width="33%"><%:IMSI%></td><td><%=IMSI%> </td></tr>
+		<tr><td width="33%"><%:ICCID%></td><td><%=ICCID%> </td></tr>
+		<tr><td width="33%"><%:OPERATOR%></td><td><%=operator%> , <%=tech_type%></td></tr>
+		<tr><td width="33%"><%:REGISTATION%></td><td><%=reg_status%> </td></tr>
+		<tr><td width="33%"><%:FREQUENCY BAND%></td><td><%=band%> </td></tr>
+		<tr><td width="33%"><%:SIGNAL STRENGTH%></td><td><%=sig_Q%> </td></tr>		
 	</table>
 </fieldset>
 <% end %>

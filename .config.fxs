@@ -2142,7 +2142,6 @@ CONFIG_PACKAGE_uboot-ar71xx-nbg460n_550n_550nh=y
 # CONFIG_PACKAGE_trace-cmd is not set
 # CONFIG_PACKAGE_trace-cmd-extra is not set
 # CONFIG_PACKAGE_valgrind is not set
-# CONFIG_PACKAGE_yun-gcc is not set
 
 #
 # Emulators
@@ -2582,7 +2581,7 @@ CONFIG_PACKAGE_kmod-usb-serial=y
 # CONFIG_PACKAGE_kmod-usb-serial-ch341 is not set
 # CONFIG_PACKAGE_kmod-usb-serial-cp210x is not set
 # CONFIG_PACKAGE_kmod-usb-serial-cypress-m8 is not set
-# CONFIG_PACKAGE_kmod-usb-serial-ftdi is not set
+CONFIG_PACKAGE_kmod-usb-serial-ftdi=y
 # CONFIG_PACKAGE_kmod-usb-serial-ipw is not set
 # CONFIG_PACKAGE_kmod-usb-serial-keyspan is not set
 # CONFIG_PACKAGE_kmod-usb-serial-mct is not set
@@ -2917,6 +2916,7 @@ CONFIG_PACKAGE_libpolarssl=y
 CONFIG_PACKAGE_bcg729=y
 CONFIG_PACKAGE_dahdi-tools-libtonezone=y
 CONFIG_PACKAGE_libiksemel=m
+# CONFIG_PACKAGE_libortp is not set
 # CONFIG_PACKAGE_libosip2 is not set
 # CONFIG_PACKAGE_libpj is not set
 # CONFIG_PACKAGE_libpjlib-util is not set
@@ -3176,7 +3176,6 @@ CONFIG_PACKAGE_libogg=m
 # CONFIG_PACKAGE_libopenldap is not set
 # CONFIG_PACKAGE_libopensc is not set
 # CONFIG_PACKAGE_liboping is not set
-# CONFIG_PACKAGE_libortp is not set
 # CONFIG_PACKAGE_libotr is not set
 # CONFIG_PACKAGE_libowfat is not set
 # CONFIG_PACKAGE_libp11 is not set
@@ -4827,7 +4826,7 @@ CONFIG_PACKAGE_dragino2-si3217x=y
 #
 # CONFIG_PACKAGE_agetty is not set
 # CONFIG_PACKAGE_microcom is not set
-# CONFIG_PACKAGE_minicom is not set
+CONFIG_PACKAGE_minicom=y
 # CONFIG_PACKAGE_picocom is not set
 # CONFIG_PACKAGE_script-utils is not set
 # CONFIG_PACKAGE_setserial is not set
@@ -4963,6 +4962,8 @@ CONFIG_PACKAGE_dragino2=y
 # CONFIG_PACKAGE_fowsr is not set
 # CONFIG_PACKAGE_freecwmp is not set
 # CONFIG_PACKAGE_freenetconfd is not set
+# CONFIG_PACKAGE_freenetconfd-plugin-examples is not set
+# CONFIG_PACKAGE_freesub is not set
 # CONFIG_PACKAGE_fxload is not set
 # CONFIG_PACKAGE_gawk is not set
 # CONFIG_PACKAGE_getopt is not set
