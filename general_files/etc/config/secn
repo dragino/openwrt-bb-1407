@@ -62,4 +62,5 @@ config secn 'modem'
 config secn 'wan'
 	option wanport 'Ethernet'
 	option ethwanmode 'DHCP'
+	option use_eth0_as_wan '0'
 

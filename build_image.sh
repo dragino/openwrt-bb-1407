@@ -10,7 +10,7 @@ APP2=
 IMAGE_SUFFIX=
 
 REPO_PATH=$(pwd)
-VERSION=3.2
+VERSION=3.2.0
 OPENWRT_PATH="barrier_breaker"
 
 while getopts 'a:b:p:v:sh' OPTION
@@ -140,7 +140,7 @@ mkdir -p $REPO_PATH/image/$APP-$APP2-build--v$VERSION--$DATE
 IMAGE_DIR=$REPO_PATH/image/$APP-$APP2-build--v$VERSION--$DATE
 
 echo ""
-echo  "***Move files to ./image/$APP-build--v$VERSION--$DATE ***"
+echo  "***Move files to ./image/$APP-$APP2-build--v$VERSION--$DATE ***"
 cp ./bin/ar71xx/openwrt-ar71xx-generic-dragino2$IMAGE_SUFFIX-kernel.bin     $IMAGE_DIR/dragino2-$APP-$APP2-v$VERSION-kernel.bin
 cp ./bin/ar71xx/openwrt-ar71xx-generic-dragino2$IMAGE_SUFFIX-rootfs-squashfs.bin   $IMAGE_DIR/dragino2-$APP-$APP2-v$VERSION-rootfs-squashfs.bin
 cp ./bin/ar71xx/openwrt-ar71xx-generic-dragino2$IMAGE_SUFFIX-squashfs-sysupgrade.bin $IMAGE_DIR/dragino2-$APP-$APP2-v$VERSION-squashfs-sysupgrade.bin
@@ -165,5 +165,5 @@ rm -rf custom_config
 cd $REPO_PATH
 
 echo ""
-echo "End Dragino2 build"
+echo "End Dragino2 build, The image can be found at $IMAGE_DIR"
 echo ""
