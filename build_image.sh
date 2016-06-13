@@ -10,7 +10,7 @@ APP2=
 IMAGE_SUFFIX=
 
 REPO_PATH=$(pwd)
-VERSION=3.1.7
+VERSION=3.2
 OPENWRT_PATH="barrier_breaker"
 
 while getopts 'a:b:p:v:sh' OPTION
@@ -84,7 +84,13 @@ fi
 if [ ! -z $BFLAG ];then
 	echo copying sub-files-$APP2
 	cp -r sub-files-$APP2/* $OPENWRT_PATH/files/
-	
+	if [ -f .config.$APP2 ];then
+		echo ""
+		echo "***Find sub customized .config files***"
+		echo "Replace default .config file with .config.$APP2"
+		echo ""
+		cp .config.$APP2 $OPENWRT_PATH/.config
+	fi
 fi
 
 echo ""
@@ -145,11 +151,16 @@ echo "***Update md5sums***"
 cat ./bin/ar71xx/md5sums | grep "dragino2" | awk '{gsub(/openwrt-ar71xx-generic-dragino2'"$IMAGE_SUFFIX"'-/,"dragino2-'"$APP"'-'"$APP2"'-v'"$VERSION"'-")}{print}' >> $IMAGE_DIR/md5sums
 
 
-#echo ""
-#echo "***Back Up Custom Config to Image DIR***"
-#mkdir $IMAGE_DIR/custom_config
-#[ -f $REPO_PATH/.config.$APP ] && cp $REPO_PATH/.config.$APP $IMAGE_DIR/custom_config/.config
-#[ -d $REPO_PATH/files-$APP ] && cp -r $REPO_PATH/files-$APP $IMAGE_DIR/custom_config/files
+echo ""
+echo "***Back Up Custom Config to Image DIR***"
+mkdir $IMAGE_DIR/custom_config
+[ -f $REPO_PATH/.config.$APP ] && cp $REPO_PATH/.config.$APP $IMAGE_DIR/custom_config/.config
+[ -f $REPO_PATH/.config.$APP2 ] && cp $REPO_PATH/.config.$APP2 $IMAGE_DIR/custom_config/.config.$APP2
+[ -d $REPO_PATH/files-$APP ] && cp -r $REPO_PATH/files-$APP $IMAGE_DIR/custom_config/files
+[ -d $REPO_PATH/sub-files-$APP2 ] && cp -r $REPO_PATH/sub-files-$APP2 $IMAGE_DIR/custom_config/files-$APP2
+cd $IMAGE_DIR
+tar zcvf custom_config.tar.gz custom_config
+rm -rf custom_config
 
 cd $REPO_PATH
 
