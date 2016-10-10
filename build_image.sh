@@ -112,7 +112,7 @@ echo " Run defconfig"
 echo ""
 make defconfig > /dev/null
 
-[ -f ./bin/ar71xx/openwrt-ar71xx-generic-dragino2{$IMAGE_SUFFIX}-squashfs-sysupgrade.bin ] && rm ./bin/ar71xx/openwrt-ar71xx-generic-dragino2{$IMAGE_SUFFIX}-squashfs-sysupgrade.bin
+[ -f ./bin/ar71xx/openwrt-ar71xx-generic-dragino2$IMAGE_SUFFIX-squashfs-sysupgrade.bin ] && rm ./bin/ar71xx/openwrt-ar71xx-generic-dragino2$IMAGE_SUFFIX-squashfs-sysupgrade.bin
 
 echo ""
 if [ ! -z $SFLAG ];then
