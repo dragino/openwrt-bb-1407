@@ -13,6 +13,7 @@ Difference between these two firmware can be found [difference between IoT Mesh 
 
 How to compile the image?
 ===============
+Below procedure are basic on a Ubuntu 14.04 machine. 
 ``` bash
 git clone https://github.com/dragino/openwrt-bb-1407.git dragino2-BB-IoT
 cd dragino2-BB-IoT
