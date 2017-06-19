@@ -10,7 +10,7 @@ APP2=
 IMAGE_SUFFIX=
 
 REPO_PATH=$(pwd)
-VERSION=3.2.0
+VERSION=3.4.1
 OPENWRT_PATH="barrier_breaker"
 
 while getopts 'a:b:p:v:sh' OPTION
