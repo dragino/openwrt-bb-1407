@@ -28,7 +28,8 @@ echo " "
 echo "*** Checkout the OpenWRT build environment to directory $OPENWRT_PATH"
 sleep 5
 mkdir -p $OPENWRT_PATH
-git clone git://git.openwrt.org/14.07/openwrt.git $OPENWRT_PATH
+git clone https://github.com/openwrt/archive.git $OPENWRT_PATH
+git checkout barrier_breaker
 
 echo "*** Backup original feeds files if they exist"
 sleep 2
