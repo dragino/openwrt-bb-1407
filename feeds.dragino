@@ -5,7 +5,8 @@ src-git routing https://github.com/openwrt-routing/packages.git;for-14.07
 src-git telephony https://github.com/openwrt/telephony.git^4165841e
 src-git management https://github.com/openwrt-management/packages.git;for-14.07
 src-git oldpackages http://git.openwrt.org/14.07/packages.git
-src-git alljoyn https://git.allseenalliance.org/gerrit/core/openwrt_feed;barrier_breaker
+#src-git alljoyn https://git.allseenalliance.org/gerrit/core/openwrt_feed;barrier_breaker
+src-git alljoyn https://github.com/alljoyn/core-openwrt_feed;barrier_breaker
 src-git dragino https://github.com/dragino/dragino-packages.git
 src-link luci ../../luci-0.12
 src-git fxs https://github.com/villagetelco/vt-fxs-packages.git
